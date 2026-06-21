@@ -6,6 +6,7 @@ This app works only in chromium based browsers (Chrome, Edge, Opera, etc) since 
 Installation is simple: just open the .html file in a browser.  Press the "connect" button, and a list of available COM ports should appear.
 
 ![Main application](Main_page.png)
+![SpectraMax M2e plate reader](SpectramaxM2e.jpg)
 
 I'm using a USB to Serial adapter cable.  The wiring to connect this to the SpectraMax M2e is shown here:
 ![Serial cable wiring on the 9-pin side](Serial_DB9.jpg)
