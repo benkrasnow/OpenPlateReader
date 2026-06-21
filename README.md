@@ -20,3 +20,7 @@ I'm using a USB to Serial adapter cable.  The wiring to connect this to the Spec
 
 ![Wellscan mode 3x3 points in each well](Wellscan_mode.png)
 ![The plate](marked_plate.jpg)
+
+I also modeled and 3D-printed the "top read" adapter to raise the position of 96 and 384 well plate by 6mm.  CAUTION:  I do not have an original adapter, and modeled this based on photos that I have seen.  I've used this on my machine without any issue, but be warned that the dimensions of this part may not be correct.  Please contact me if you have an original adapter and can make some measurements.
+
+![Top read adapter](topread_adapter.jpg)
