@@ -1,0 +1,2220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenPlateReader — M2e control</title>
+<style>
+  :root{
+    --bg:#0f1419; --panel:#161c24; --panel2:#1d242e; --line:#2a3340;
+    --fg:#e6edf3; --muted:#8b98a8; --accent:#3da9fc; --accent2:#2d7dd2;
+    --good:#3fb950; --bad:#f85149; --warn:#d29922; --mono:#d2dce8;
+    --radius:8px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--fg);
+    font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    display:flex; flex-direction:column; height:100vh; overflow:hidden;
+  }
+  h1,h2,h3{margin:0;font-weight:600}
+  button{
+    font:inherit; color:var(--fg); background:var(--panel2);
+    border:1px solid var(--line); border-radius:6px; padding:6px 12px;
+    cursor:pointer;
+  }
+  button:hover:not(:disabled){border-color:var(--accent)}
+  button:disabled{opacity:.45; cursor:not-allowed}
+  button.primary{background:var(--accent2); border-color:var(--accent2)}
+  button.primary:hover:not(:disabled){background:var(--accent)}
+  button.danger{border-color:var(--bad); color:var(--bad)}
+  input,select{
+    font:inherit; color:var(--fg); background:#0c1117;
+    border:1px solid var(--line); border-radius:6px; padding:5px 8px;
+  }
+  input:focus,select:focus{outline:none; border-color:var(--accent)}
+  input[type=number]{width:90px}
+  label{color:var(--muted); font-size:12px; display:block; margin-bottom:3px}
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  .field{display:flex; flex-direction:column}
+  .pill{padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600}
+  .pill.off{background:#3a2226; color:var(--bad)}
+  .pill.on{background:#16321d; color:var(--good)}
+  .pill.busy{background:#3a3216; color:var(--warn)}
+
+  /* top bar */
+  header{
+    background:var(--panel); border-bottom:1px solid var(--line);
+    padding:10px 16px; display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+  }
+  header .brand{font-size:16px; font-weight:700; letter-spacing:.3px}
+  header .brand small{color:var(--muted); font-weight:400; font-size:11px}
+  header .spacer{flex:1}
+  .statusgrp{display:flex; gap:10px; align-items:center}
+  .drawerctl{display:flex; flex-direction:column; gap:4px; align-items:stretch}
+  .drawerctl .row{gap:6px}
+  .drawernote{font-size:10px; line-height:1.25; color:var(--muted); max-width:240px}
+
+  /* main split */
+  main{flex:1; display:flex; min-height:0}
+  .sidebar{
+    width:330px; min-width:300px; background:var(--panel);
+    border-right:1px solid var(--line); overflow-y:auto; padding:14px;
+  }
+  .content{flex:1; display:flex; flex-direction:column; min-width:0}
+  .workspace{flex:1; overflow:auto; padding:16px}
+  .card{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:var(--radius); padding:14px; margin-bottom:14px;
+  }
+  .card h3{font-size:13px; text-transform:uppercase; letter-spacing:.6px;
+    color:var(--muted); margin-bottom:10px}
+
+  /* mode tabs */
+  .modes{display:flex; flex-direction:column; gap:4px}
+  .modes button{text-align:left; border-color:transparent; background:transparent}
+  .modes button.active{background:var(--panel2); border-color:var(--accent)}
+  .modes .grouphead{color:var(--muted); font-size:11px; text-transform:uppercase;
+    letter-spacing:.6px; margin:10px 0 2px 4px}
+
+  table{border-collapse:collapse; width:100%; font-size:13px}
+  th,td{border:1px solid var(--line); padding:4px 8px; text-align:right}
+  th{background:var(--panel2); color:var(--muted); font-weight:600; text-align:right}
+  td.lbl,th.lbl{text-align:left}
+  .tablewrap{overflow:auto; max-height:340px}
+
+  /* terminal */
+  .term{
+    background:#080b0f; border-top:1px solid var(--line);
+    font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12.5px;
+    display:flex; flex-direction:column; height:210px;
+  }
+  .term.collapsed{height:34px}
+  .term .resize{
+    height:6px; cursor:row-resize; background:var(--panel);
+    border-bottom:1px solid var(--line); flex:0 0 auto;
+  }
+  .term .resize:hover{background:var(--line)}
+  .term.collapsed .resize{display:none}
+  .term .bar{
+    display:flex; align-items:center; gap:10px; padding:6px 12px;
+    background:var(--panel); border-bottom:1px solid var(--line); cursor:pointer;
+    user-select:none;
+  }
+  .term .log{flex:1; overflow:auto; padding:8px 12px; white-space:pre-wrap; color:var(--mono)}
+  .term .log .tx{color:var(--accent)}
+  .term .log .rx{color:#9fb4c7}
+  .term .log .sys{color:var(--muted)}
+  .term .log .err{color:var(--bad)}
+  .term .input{display:flex; gap:8px; padding:8px 12px; border-top:1px solid var(--line)}
+  .term .input input{flex:1; font-family:inherit}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+  .hint{color:var(--muted); font-size:12px; margin-top:6px}
+  /* right-pane mode selector */
+  .modeselect{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px}
+  .modeselect .mode-pill{
+    padding:5px 12px; border:1px solid var(--line); border-radius:999px;
+    background:transparent; color:var(--fg); cursor:pointer; font-size:13px;
+  }
+  .modeselect .mode-pill:hover{border-color:var(--accent)}
+  .modeselect .mode-pill.active{background:var(--accent); border-color:var(--accent); color:#04121f}
+  .field.check{justify-content:flex-end}
+  .field .checkbox{display:flex; align-items:center; gap:6px; cursor:pointer; font-size:13px; color:var(--fg)}
+  .field .checkbox input{width:auto; margin:0}
+  .form-hint{font-size:12px; margin-top:8px; padding:5px 8px; border-radius:5px}
+  .form-hint.err{background:#2a1116; color:var(--bad); border:1px solid var(--bad)}
+  .form-hint.info{color:var(--good)}
+  canvas{background:#0c1117; border:1px solid var(--line); border-radius:6px; max-width:100%}
+  #chartArea{display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start}
+  .heatmap-group{display:inline-flex; flex-direction:column; align-items:center; gap:4px}
+  .hmap-label{font-size:13px; color:var(--muted)}
+
+  /* heatmap color-scale dual slider */
+  #heatScaleWrap{max-width:420px; margin:0 0 14px}
+  .heatscale-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px}
+  .heatscale-title{font-size:13px; color:var(--muted)}
+  .link-btn{background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; padding:0}
+  .link-btn:hover{text-decoration:underline}
+  .dualrange{position:relative; height:24px}
+  .dualrange .dr-track{position:absolute; top:50%; left:0; right:0; height:4px; transform:translateY(-50%);
+    border-radius:3px; background:linear-gradient(90deg,#0d47a1,#3fb950,#d29922,#f85149)}
+  .dualrange .dr-fill{position:absolute; top:50%; height:6px; transform:translateY(-50%);
+    border-radius:3px; outline:2px solid var(--fg); outline-offset:0; pointer-events:none}
+  .dualrange input[type=range]{position:absolute; top:0; left:0; width:100%; height:24px; margin:0;
+    background:none; pointer-events:none; -webkit-appearance:none; appearance:none}
+  .dualrange input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; appearance:none;
+    width:16px; height:16px; border-radius:50%; background:var(--fg); border:2px solid #0c1117;
+    box-shadow:0 0 0 1px var(--fg); cursor:grab; pointer-events:auto}
+  .dualrange input[type=range]::-moz-range-thumb{width:16px; height:16px; border-radius:50%;
+    background:var(--fg); border:2px solid #0c1117; box-shadow:0 0 0 1px var(--fg); cursor:grab; pointer-events:auto}
+  .dualrange input[type=range]::-moz-range-track{background:none}
+  .heatscale-vals{display:flex; align-items:center; gap:6px; margin-top:6px;
+    font-family:ui-monospace,monospace; font-size:12px; color:var(--fg)}
+  .heatscale-spacer{flex:1}
+  .heatscale-vals .sw{width:12px; height:12px; border-radius:3px; display:inline-block; border:1px solid var(--line)}
+  .heatscale-vals .sw-lo{background:#0d47a1}
+  .heatscale-vals .sw-hi{background:#f85149}
+
+  /* plate grid */
+  .plate{display:inline-block; user-select:none}
+  .plate table{width:auto}
+  .plate td{width:26px; height:22px; text-align:center; cursor:pointer; padding:0;
+    font-size:10px; color:var(--muted)}
+  .plate td.well{background:#0c1117}
+  .plate td.well.sel{background:var(--accent2); color:#fff}
+  .plate td.corner,.plate td.rowhdr,.plate td.colhdr{background:var(--panel2); cursor:default}
+
+  details summary{cursor:pointer; color:var(--muted); font-size:12px}
+  .toast{position:fixed; bottom:230px; right:20px; background:var(--panel2);
+    border:1px solid var(--line); border-radius:8px; padding:10px 14px; opacity:0;
+    transition:opacity .2s; pointer-events:none; max-width:340px}
+  .toast.show{opacity:1}
+  .unsupported{background:#3a2226; color:#ffd7d4; padding:14px; border-radius:8px;
+    border:1px solid var(--bad); margin:16px}
+  code{background:#0c1117; padding:1px 5px; border-radius:4px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">OpenPlateReader <small>M2e serial control</small></div>
+  <div class="row">
+    <button id="btnConnect" class="primary">Connect</button>
+    <button id="btnDisconnect" disabled>Disconnect</button>
+    <span id="connState" class="pill off">disconnected</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="statusgrp">
+    <span class="field" style="min-width:60px">
+      <label>Drawer</label>
+      <span id="drawerState" class="pill off">—</span>
+    </span>
+    <span class="field" style="min-width:72px">
+      <label>Machine</label>
+      <span id="machineState" class="pill off">—</span>
+    </span>
+    <span class="field" style="min-width:120px">
+      <label>Temperature</label>
+      <span id="tempReadout" style="font-family:ui-monospace">—</span>
+    </span>
+    <span class="drawerctl">
+      <span class="row">
+        <button id="btnOpen" disabled>Open drawer</button>
+        <button id="btnClose" disabled>Close drawer</button>
+      </span>
+      <small class="drawernote">Start a plate measurement with the plate in the open drawer, and it will close
+      automatically before the measurement. Closing the drawer manually will cause well location inaccuracies.</small>
+    </span>
+  </div>
+</header>
+
+<div id="unsupported" class="unsupported" hidden>
+  <b>Web Serial API not available.</b> Open this file in a Chromium browser
+  (Google Chrome, Microsoft Edge, or Opera). Firefox and Safari do not support Web Serial.
+</div>
+
+<main>
+  <aside class="sidebar">
+    <div class="card">
+      <h3>Measurement mode</h3>
+      <div class="modes" id="modeList"></div>
+    </div>
+
+    <div class="card">
+      <h3>Common controls</h3>
+      <div class="field" style="margin-bottom:8px">
+        <label>Temperature control (°C)</label>
+        <div class="row">
+          <input id="setTemp" type="number" value="37" step="0.1">
+          <button id="btnSetTemp" disabled>Set</button>
+          <button id="btnTempOff" disabled>Turn off</button>
+        </div>
+      </div>
+      <div class="row">
+        <button id="btnShakeNow" disabled>Shake now</button>
+        <button id="btnShakeStop" disabled>Stop shake</button>
+      </div>
+    </div>
+
+
+    <div class="card">
+      <h3>Serial settings</h3>
+      <div class="grid2">
+        <div class="field">
+          <label>Baud rate</label>
+          <select id="baud">
+            <option selected>9600</option><option>19200</option><option>38400</option>
+            <option>57600</option><option>115200</option><option>230400</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Data bits</label>
+          <select id="dataBits"><option>8</option><option>7</option></select>
+        </div>
+        <div class="field">
+          <label>Stop bits</label>
+          <select id="stopBits"><option>1</option><option>2</option></select>
+        </div>
+        <div class="field">
+          <label>Parity</label>
+          <select id="parity"><option value="none">none</option>
+            <option value="even">even</option><option value="odd">odd</option></select>
+        </div>
+        <div class="field">
+          <label>Sequential command delay (ms)</label>
+          <input id="cmdDelay" type="number" min="0" step="1" value="50">
+        </div>
+      </div>
+      <p class="hint">Defaults to 9600 baud, 8-N-1. Commands are terminated with CR. Change only if needed to match your device. The sequential command delay waits this many milliseconds after the device's final “&gt;” prompt before sending the next command.</p>
+    </div>
+  </aside>
+
+  <section class="content">
+    <div class="workspace">
+      <div class="card" id="configCard">
+        <h3 id="modeTitle">Mode</h3>
+        <div id="modeForm"></div>
+        <div class="row" style="margin-top:14px">
+          <button id="btnRun" class="primary" disabled>Run measurement</button>
+          <button id="btnCsv" disabled>Save CSV</button>
+          <span id="runStatus" class="hint"></span>
+        </div>
+        <p class="hint" id="modeDesc"></p>
+      </div>
+
+      <div class="card" id="resultsCard" hidden>
+        <h3>Results</h3>
+        <div id="heatScaleWrap" hidden>
+          <div class="heatscale-head">
+            <span class="heatscale-title">Heatmap color scale</span>
+            <button id="heatScaleReset" class="link-btn" type="button">Reset to full range</button>
+          </div>
+          <div class="dualrange" id="dualRange">
+            <div class="dr-track"></div>
+            <div class="dr-fill" id="drFill"></div>
+            <input type="range" id="drLo" class="dr-input" min="0" max="1000" step="1" value="0">
+            <input type="range" id="drHi" class="dr-input" min="0" max="1000" step="1" value="1000">
+          </div>
+          <div class="heatscale-vals">
+            <span class="sw sw-lo"></span><span id="drLoVal">—</span>
+            <span class="heatscale-spacer"></span>
+            <span id="drHiVal">—</span><span class="sw sw-hi"></span>
+          </div>
+        </div>
+        <div id="chartArea"></div>
+        <div class="tablewrap"><table id="resultsTable"></table></div>
+      </div>
+    </div>
+
+    <div class="term collapsed" id="term">
+      <div class="resize" id="termResize" title="Drag to resize"></div>
+      <div class="bar" id="termBar">
+        <span id="termToggle">▸</span><b>Serial terminal</b>
+        <span class="hint" id="termHint">click to expand · raw command I/O</span>
+        <div class="spacer" style="flex:1"></div>
+        <button id="btnClearLog" onclick="event.stopPropagation()">Clear</button>
+      </div>
+      <div class="log" id="termLog"></div>
+      <div class="input">
+        <input id="termInput" placeholder="Type a command, e.g. !STATUS  (Enter to send)" disabled>
+        <button id="termSend" disabled>Send</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ===================================================================
+   OpenPlateReader — single-file Web Serial GUI for the M2e plate reader
+   Sections: utils · SerialLink · M2e protocol · parser · modes · UI · self-test
+   =================================================================== */
+
+const $ = (id) => document.getElementById(id);
+const el = (tag, attrs={}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs)){
+    if (k==="class") n.className=v;
+    else if (k==="html") n.innerHTML=v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else if (v!==null && v!==undefined) n.setAttribute(k, v);
+  }
+  for (const kid of kids) n.append(kid?.nodeType ? kid : document.createTextNode(kid));
+  return n;
+};
+const sleep = (ms) => new Promise(r=>setTimeout(r,ms));
+
+function toast(msg, ms=2600){
+  const t=$("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"), ms);
+}
+
+/* ---------- terminal log ---------- */
+const TERM_MAX_LINES = 250;
+function logLine(text, cls="sys"){
+  const log=$("termLog");
+  const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 30;
+  const ts = new Date().toLocaleTimeString();
+  log.append(el("div",{class:cls}, `[${ts}] ${text}`));
+  while (log.childElementCount > TERM_MAX_LINES) log.removeChild(log.firstChild);
+  if (atBottom) log.scrollTop = log.scrollHeight;
+}
+
+/* ===================================================================
+   SerialLink — transport + promise-based command queue
+   =================================================================== */
+class SerialLink {
+  constructor(){
+    this.port=null; this.reader=null; this.writer=null;
+    this.readLoop=null; this.buffer=""; this.connected=false;
+    this.onLine=null;            // callback(rawLine)
+    this.eol="\r";               // M2e uses CR-only line endings
+    this.timeout=5000;           // hard timeout (ms) if device never responds
+    this.cmdDelay=50;            // ms to wait after a response's final ">" before the next command
+    this._activeCollector=null;  // {lines, promptCount, prompts, idle, item, waitFor, waitForSeen}
+    this._pending=[];            // waiting commands, scheduled by priority then FIFO
+    this._seq=0;                 // monotonic counter for FIFO tie-breaking
+    this._sending=false;         // true while one command is in flight on the wire
+    this._gateUntil=0;           // don't pump the next command until performance.now() reaches this
+    this._pumpTimer=null;        // pending deferred-pump timer while inside the gate window
+  }
+  get supported(){ return "serial" in navigator; }
+
+  async connect(opts){
+    if (!this.supported) throw new Error("Web Serial not supported in this browser.");
+    this.port = await navigator.serial.requestPort();
+    await this.port.open({
+      baudRate:opts.baudRate, dataBits:opts.dataBits, stopBits:opts.stopBits,
+      parity:opts.parity, bufferSize:4096, flowControl:"none"
+    });
+    this.writer = this.port.writable.getWriter();
+    this.connected = true;
+    this._startReadLoop();
+    logLine(`connected @ ${opts.baudRate} ${opts.dataBits}${opts.parity[0].toUpperCase()}${opts.stopBits}`, "sys");
+  }
+
+  async disconnect(){
+    this.connected=false;
+    // Fail any commands still waiting so their callers don't hang forever.
+    const waiting=this._pending.splice(0);
+    for(const it of waiting) it.reject(new Error("disconnected"));
+    try { if (this.reader){ await this.reader.cancel(); } } catch(_){}
+    try { if (this.readLoop){ await this.readLoop; } } catch(_){}
+    try { if (this.writer){ this.writer.releaseLock(); } } catch(_){}
+    try { if (this.port){ await this.port.close(); } } catch(_){}
+    this.port=this.reader=this.writer=this.readLoop=null; this.buffer="";
+    logLine("disconnected","sys");
+  }
+
+  async _startReadLoop(){
+    const decoder = new TextDecoder();
+    this.reader = this.port.readable.getReader();
+    this.readLoop = (async()=>{
+      try{
+        while(this.connected){
+          const {value,done} = await this.reader.read();
+          if (done) break;
+          this.buffer += decoder.decode(value,{stream:true});
+          this._drainLines();
+          this._drainPrompt();
+        }
+      }catch(e){ if(this.connected) logLine("read error: "+e.message,"err"); }
+      finally{ try{ this.reader.releaseLock(); }catch(_){ } }
+    })();
+  }
+
+  _drainLines(){
+    let idx;
+    while((idx = this.buffer.search(/\r\n|\r|\n/)) >= 0){
+      const line = this.buffer.slice(0, idx);
+      this.buffer = this.buffer.slice(idx + this.buffer.match(/\r\n|\r|\n/)[0].length);
+      this._handleLine(line);
+    }
+  }
+  // device prompts with a bare ">" when it is ready for the next command
+  static isPrompt(s){ const t=s.trim(); return t===">" || t.endsWith(">"); }
+
+  _handleLine(line){
+    const c=this._activeCollector;
+    if (c){
+      c.lines.push(line);
+      if (SerialLink.isPrompt(line)) c.promptCount++;
+      // If a waitFor pattern is required, mark it satisfied when matched
+      if (c.waitFor && !c.waitForSeen && c.waitFor.test(line)) c.waitForSeen=true;
+      this._checkDone();
+    }
+    if (line.trim()!=="") logLine(line, "rx");
+    if (this.onLine) this.onLine(line);
+  }
+  // a ">" prompt is usually sent with no trailing newline; catch it from the buffer tail
+  _drainPrompt(){
+    const c=this._activeCollector; if(!c) return;
+    if (/^[ \t]*>[ \t]*$/.test(this.buffer)){
+      this.buffer=""; this._handleLine(">");
+    }
+  }
+  /* Finalize the moment the response is complete — no fixed delays. The ">" ready
+     prompt is the authoritative end-of-response signal. Each command knows how many
+     prompts to expect: 1 for simple commands ("OK >"), 2 for commands whose output
+     follows the first prompt ("OK > <data> >" — STATUS/TEMP/QUEUE/TRANSFER/WELLSCANMODE/
+     SPEED), plus an optional marker (e.g. "readstage complete"). Finalizing on the
+     LAST ">" of the response means nothing leaks into the next command. */
+  _checkDone(){
+    const c=this._activeCollector; if(!c) return;
+    if (c.promptCount >= c.prompts && c.waitForSeen){ this._finishCollector("ok"); return; }
+    // Not done yet — keep the hard safety timeout fresh in case the device goes silent.
+    clearTimeout(c.idle);
+    c.idle=setTimeout(()=>this._finishCollector("timeout"), c.timeout);
+  }
+  _finishCollector(reason){
+    const c=this._activeCollector; if(!c) return;
+    this._activeCollector=null; clearTimeout(c.idle);
+    this._sending=false;
+    if (reason==="timeout") logLine(`⚠ timeout after ${c.timeout}ms waiting for "${c.cmd}"`, "err");
+    c.item.resolve({ lines:c.lines.slice(), raw:c.lines.join("\n"), timedOut:reason==="timeout" });
+    // Hold off the next command for cmdDelay ms after this response's final ">".
+    // _pump() enforces the gate, so every send path (including a follow-up queued
+    // synchronously by the caller we just resolved) respects the delay.
+    this._gateUntil = performance.now() + Math.max(0, this.cmdDelay);
+    // Defer one microtask so the caller we just resolved gets to enqueue its follow-up
+    // first. This keeps a measurement's next command ahead of any low-priority poll.
+    Promise.resolve().then(()=>this._pump());
+  }
+
+  /* Pick the highest-priority waiting command (FIFO within a priority) and send it.
+     One command is in flight at a time; the device handles only one at a time. */
+  _pump(){
+    if (this._sending || this._activeCollector) return;
+    if (!this._pending.length) return;
+    if (!this.connected){
+      for(const it of this._pending.splice(0)) it.reject(new Error("not connected"));
+      return;
+    }
+    // Honour the inter-command delay: if we're still inside the gate window, retry
+    // when it expires instead of sending now.
+    const wait = this._gateUntil - performance.now();
+    if (wait > 0){
+      clearTimeout(this._pumpTimer);
+      this._pumpTimer = setTimeout(()=>this._pump(), wait);
+      return;
+    }
+    let best=0;
+    for(let i=1;i<this._pending.length;i++){
+      const a=this._pending[i], b=this._pending[best];
+      if (a.priority>b.priority || (a.priority===b.priority && a.seq<b.seq)) best=i;
+    }
+    const item=this._pending.splice(best,1)[0];
+    this._sending=true;
+    // Arm the collector *before* writing, so a fast device reply can never arrive
+    // while nothing is listening (which would drop it and hang the caller's promise).
+    const c={ lines:[], item, promptCount:0, cmd:item.text,
+              prompts:item.prompts ?? 1, timeout:item.timeout ?? this.timeout, idle:null,
+              waitFor:item.waitFor, waitForSeen:!item.waitFor };
+    this._activeCollector=c;
+    c.idle=setTimeout(()=>this._finishCollector("timeout"), c.timeout);
+    logLine(item.text, "tx");
+    this.writer.write(new TextEncoder().encode(item.text + this.eol))
+      .catch(e=>logLine("write error: "+e.message, "err"));
+  }
+
+  /* Queue one command; resolve once the response is complete (the expected number of
+     ">" ready prompts, plus any waitFor marker). Higher `priority` is sent first;
+     background polls (STATUS/TEMP) use a negative priority. `coalesce:true` drops a
+     duplicate if an identical command is already waiting unsent — used for the periodic
+     STATUS/TEMP polls so they never pile up more than one of each in the queue. */
+  send(text, {timeout=null, waitFor=null, priority=0, prompts=1, coalesce=false}={}){
+    if (coalesce){
+      const dup=this._pending.find(p=>p.text===text && p.priority===priority);
+      if (dup) return dup.promise;
+    }
+    let resolve, reject;
+    const promise=new Promise((res,rej)=>{ resolve=res; reject=rej; });
+    this._pending.push({ text, timeout, waitFor, priority, prompts, seq:this._seq++, resolve, reject, promise });
+    this._pump();
+    return promise;
+  }
+}
+
+/* ===================================================================
+   M2e — protocol layer (one method per command + orchestration)
+   =================================================================== */
+class M2e {
+  constructor(link){ this.link=link; }
+  cmd(t, opts){
+    // ABSCUV/ABSPLA/FLUCUV READTYPE and READSTAGE answer "OK >" then, after 5–10 s,
+    // "readstage complete" followed by a final ready ">". (FLU/LUM/TIME READTYPE answer
+    // with only "OK >" and instead use a separate READSTAGE TOP.)
+    if (/^!READTYPE\s+(ABSCUV|ABSPLA|FLUCUV)\b/i.test(t) || /^!READSTAGE\b/i.test(t))
+      return this.link.send(t, {prompts:2, waitFor:/readstage complete/i, timeout:15000, ...opts});
+    // Query/data commands answer "OK > <data> >" — their output follows the first ready
+    // prompt, so the response isn't complete until the second ">".
+    if (/^!STATUS$/i.test(t) || /^!TEMP$/i.test(t) || /^!QUEUE$/i.test(t)
+        || /^!TRANSFER$/i.test(t) || /^!WELLSCANMODE$/i.test(t) || /^!SPEED\s+(ON|OFF)$/i.test(t))
+      return this.link.send(t, {prompts:2, ...opts});
+    // Everything else answers "OK >" — complete at the first ready prompt.
+    return this.link.send(t, opts);
+  }
+
+  // Background readouts — lowest priority, and coalesced so at most one of each is ever
+  // queued (polling faster than the device drains them would just waste queue slots).
+  status(){ return this.cmd("!STATUS", {priority:-1, coalesce:true}); }
+  temp(){ return this.cmd("!TEMP", {priority:-1, coalesce:true}); }
+  setTemp(x){ return this.cmd(`!TEMP ${x}`); }
+  openDrawer(){ return this.cmd("!OPEN"); }
+  closeDrawer(){ return this.cmd("!CLOSE"); }
+  shakeNow(){ return this.cmd("!SHAKE NOW"); }
+  shakeStop(){ return this.cmd("!SHAKE STOP"); }
+
+  // Parse "!QUEUE" -> integer count of completed reads available
+  async queueCount(){
+    const r = await this.cmd("!QUEUE");
+    for (const ln of r.lines){
+      const m = ln.match(/^\s*(\d+)\s*\.?\s*$/);
+      if (m) return parseInt(m[1],10);
+    }
+    return 0;
+  }
+  transfer(){ return this.cmd("!TRANSFER"); }
+
+  /* Query "!WELLSCANMODE" -> true (on) / false (off) / null (unrecognized). */
+  async wellscanMode(){
+    const r = await this.cmd("!WELLSCANMODE");
+    const txt = (r.raw || r.lines.join(" ")).toLowerCase();
+    if(/\bon\b/.test(txt))  return true;
+    if(/\boff\b/.test(txt)) return false;
+    return null;
+  }
+  /* Bring wellscan mode to the desired state, sending ON/OFF only when it isn't
+     already there (an unrecognized current reading is forced to `want`). */
+  async ensureWellscanMode(want){
+    const cur = await this.wellscanMode();
+    if(cur === want) return;
+    await this.cmd(want ? "!WELLSCANMODE ON" : "!WELLSCANMODE OFF");
+  }
+
+  /* Run a full measurement: send config sequence, READ, then stream results.
+     Polls !QUEUE every 2 s; whenever reads are available, drains them with
+     !TRANSFER one-at-a-time, calling onTransfer(rawChunk) after each one so
+     the UI can update incrementally.
+
+     There is no fixed timeout — some reads (e.g. plate luminescence) can
+     legitimately take much longer than others. Instead this keeps polling
+     QUEUE for as long as the device is "measuring". Immediately after !READ
+     the device may still report "idle" for a moment (or that reading may
+     already be in flight from before the read started), so an idle reading
+     is ignored until the device has been observed actually measuring at
+     least once during this run. Once that's happened, a later idle reading
+     with an empty queue means the device is done and nothing more is coming.
+     Fast reads that complete before any status poll lands are handled too:
+     they're picked up directly by the QUEUE check regardless of status.
+
+     getStatus(), if provided, must return "measuring", "idle", or null/undefined
+     for anything else (garbled response, transient noise, etc.) — an unrecognized
+     reading is never treated as either state, so it can't be mistaken for "idle"
+     and trigger a false stop. */
+  async runSequence(seq, {expected=1, onProgress=()=>{}, onTransfer=null, getStatus=null}={}){
+    onProgress("configuring…");
+    for (const c of seq){
+      // Bare !WELLSCANMODE is a query: turn the mode OFF only if it's currently on.
+      if(/^!WELLSCANMODE$/i.test(c)){ await this.ensureWellscanMode(false); continue; }
+      await this.cmd(c);
+    }
+    onProgress("starting read…");
+    await this.cmd("!READ");
+
+    const parts = [];
+    let collected = 0;
+    let everMeasuring = false;
+
+    while(collected < expected){
+      await sleep(2000);
+      let count = 0;
+      try { count = await this.queueCount(); } catch(_){}
+      onProgress(`measuring… ${collected}/${expected}, queue=${count}`);
+      // Drain whatever is ready right now
+      while(count > 0 && collected < expected){
+        onProgress(`transferring ${collected+1}/${expected}…`);
+        const res = await this.transfer();
+        parts.push(res.raw);
+        if(onTransfer) onTransfer(res.raw);
+        collected++;
+        if(collected < expected){
+          try { count = await this.queueCount(); } catch(_){ count=0; }
+        }
+      }
+      if(collected >= expected) break;
+      if(getStatus){
+        const status = getStatus();
+        if(status === "measuring") everMeasuring = true;
+        else if(status === "idle" && everMeasuring && count === 0) break; // confirmed done, nothing more coming
+      }
+    }
+
+    if(collected < expected) onProgress("stopped — partial data");
+    return parts.join("\n");
+  }
+
+  /* Poll QUEUE until one read is available, then TRANSFER it once. Same status
+     gating as runSequence: a confirmed idle with empty queue (after measuring was
+     seen) means nothing is coming → returns null. */
+  async _awaitOneRead({onProgress=()=>{}, getStatus=null, label=""}={}){
+    let everMeasuring=false;
+    while(true){
+      await sleep(2000);
+      let count=0;
+      try{ count=await this.queueCount(); }catch(_){}
+      onProgress(`${label} queue=${count}`);
+      if(count>0) return (await this.transfer()).raw;
+      if(getStatus){
+        const s=getStatus();
+        if(s==="measuring") everMeasuring=true;
+        else if(s==="idle" && everMeasuring && count===0) return null;
+      }
+    }
+  }
+
+  /* Wellscan: sample a 3×3 grid (9 sub-positions, ±1.133 mm) inside every well.
+     Turns WELLSCANMODE ON during setup, steps the carriage through all 9 positions
+     (one READ/TRANSFER each), then turns WELLSCANMODE OFF. spec = {preamble,
+     firstSetup, recalib, block}; onTransfer(rawChunk, scanPos) fires per position. */
+  async runWellscan(spec, {onProgress=()=>{}, onTransfer=null, getStatus=null}={}){
+    const {preamble, firstSetup, recalib, block}=spec;
+    const b=block||{r0:0,c0:0,rows:8,cols:12};
+    onProgress("configuring wellscan…");
+    for(const c of preamble){
+      // Bare !WELLSCANMODE is a query: turn the mode ON only if it's currently off.
+      if(/^!WELLSCANMODE$/i.test(c)){ await this.ensureWellscanMode(true); continue; }
+      await this.cmd(c);
+    }
+    const xBase=14.380, step=1.133, yBase=11.235 + 9*(b.r0||0);
+    const xs=[xBase-step, xBase, xBase+step];
+    const ys=[yBase-step, yBase, yBase+step];
+    const strip=`!STRIP ${(b.c0||0)+1} ${b.cols}`;
+    let pos=0;
+    for(const y of ys){
+      for(const x of xs){
+        pos++;
+        onProgress(`wellscan position ${pos}/9…`);
+        await this.cmd(`!XPOS ${x.toFixed(3)} 9 12`);
+        await this.cmd(`!YPOS ${y.toFixed(3)} 9 ${b.rows}`);
+        await this.cmd("!SHAKE OFF");
+        if(pos===1){ for(const c of firstSetup) await this.cmd(c); }
+        else { await this.cmd(recalib); await this.cmd(strip); }
+        await this.cmd("!READ");
+        const raw=await this._awaitOneRead({onProgress, getStatus, label:`position ${pos}/9`});
+        if(raw && onTransfer) onTransfer(raw, pos);
+      }
+    }
+    // Wellscan leaves the mode as-is — no trailing !WELLSCANMODE command.
+    onProgress("wellscan complete — 9 positions");
+  }
+}
+
+/* ===================================================================
+   Parser — period-delimited !TRANSFER payload -> structured records
+   =================================================================== */
+const Parse = (()=>{
+  // Extract all signed decimal/integer numbers from any string
+  const nums = (s)=> (s.match(/-?\d+(?:\.\d+)?/g)||[]).map(Number);
+
+  // The device emits "#SAT" for a well that saturated the detector. We surface this
+  // as the literal string "saturated" rather than dropping it as a non-number.
+  const SATURATED = "saturated";
+  const RE_SAT = /#?\bSAT\b/i;
+  // Parse one already-tab-split, trimmed field into a measurement value:
+  //   a number, the string "saturated" for #SAT, or null if it isn't a value.
+  const parseVal = (s)=>{
+    const t = (s==null ? "" : String(s)).trim();
+    if (t==="") return null;
+    if (RE_SAT.test(t)) return SATURATED;
+    const n = Number(t);
+    return isNaN(n) ? null : n;
+  };
+
+  // The M2e device uses TAB as the field separator between values on a line.
+  // Numbers themselves still use '.' as the decimal separator.
+  // Split a raw line by tab and trim each field.
+  const tabFields = (line) => line.split('\t').map(s => s.trim());
+
+  // Lines that carry no measurement data
+  const RE_NOISE = /^\s*(OK[.\t]?|>|readstage complete[.\t]?|normal mode[.\t]?|off|on)\s*$/i;
+
+  function parseTransfer(text){
+    const lines = text.split(/\r\n|\r|\n/);
+    const records = [];
+    let rec = null;
+    const newRec = (time, temp, type)=>{
+      rec = { time, temp, type, ex:[], em:[], abs:[], fluo:[], wells:[], wavelengths:[] };
+      records.push(rec);
+    };
+    let pendingPair = null; // {ex,em} waiting for its fluorescence value line
+    let pendingWl   = null; // current emission/wavelength group for plate well rows
+    let pendingEx   = null; // current excitation value for plate well rows (lum/fluo)
+
+    for (const raw of lines){
+      const line = raw.replace(/[\r\t ]+$/,''); // strip trailing whitespace
+      if (!line.trim()) continue;
+      if (RE_NOISE.test(line)) continue;
+
+      const f = tabFields(line);
+      const f0 = f[0];
+
+      // --- Header: <timestamp> TAB <temp> TAB cuvette|plate ---
+      if (/^\d{6,}$/.test(f0) && f.length >= 3 && /^(cuvette|plate)$/i.test(f[2]||'')){
+        newRec(+f0, parseFloat(f[1]), f[2].toLowerCase());
+        pendingPair = null; pendingWl = null; pendingEx = null;
+        continue;
+      }
+
+      if (!rec){
+        rec = { time:null, temp:null, type:"unknown", ex:[],em:[],abs:[],fluo:[],wells:[],wavelengths:[] };
+        records.push(rec);
+      }
+
+      // --- exL: line ---
+      if (/^exL:/i.test(f0)){ rec.ex.push(...nums(line)); continue; }
+
+      // --- emL: line ---
+      if (/^emL:/i.test(f0)){ rec.em.push(...nums(line)); continue; }
+
+      // --- L: lines (wavelength list, absorbance data, or fluorescence ex/em pair) ---
+      if (f0 === 'L:'){
+        const rest = f.slice(1).filter(s => s !== '');
+        const ns   = rest.map(Number).filter(n => !isNaN(n));
+        if (ns.length >= 2 && !Number.isInteger(ns[1])){
+          // L: wl TAB absorbance TAB transmittance  →  absorbance data row
+          rec.abs.push({ wavelength:ns[0], absorbance:ns[1], transmittance:ns[2]??null });
+        } else if (rec.type === "plate" && ns.length >= 1 && ns.every(n => Number.isInteger(n))){
+          // Plate: all-integer L: lines are wavelength info, never fluorescence pairs.
+          if (rec.ex.length > 0 || rec.em.length > 0) {
+            // Luminescence/fluorescence: L: ex em is a group header; the emission (last) value
+            // becomes pendingWl, the excitation (first, if a pair) becomes pendingEx.
+            const wl = ns[ns.length - 1];
+            if (!rec.wavelengths.includes(wl)) rec.wavelengths.push(wl);
+            pendingWl = wl;
+            pendingEx = ns.length > 1 ? ns[0] : null;
+          } else if (ns.length > 1) {
+            // Absorbance: wavelength list (e.g. L: 405 700)
+            rec.wavelengths.push(...ns);
+          } else {
+            // Absorbance: single-integer group header (e.g. L: 405)
+            if (!rec.wavelengths.includes(ns[0])) rec.wavelengths.push(ns[0]);
+            pendingWl = ns[0];
+          }
+        } else if (ns.length === 2 && Number.isInteger(ns[0]) && Number.isInteger(ns[1])
+                   && (rec.ex.length > 0 || rec.em.length > 0)){
+          // Cuvette fluorescence: L: ex TAB em  →  ex/em pair header (value on next line).
+          // Only when exL:/emL: have already been seen — otherwise two integers are a
+          // wavelength list (e.g. absorbance "L: 426 500"), not a fluorescence pair.
+          pendingPair = { ex:ns[0], em:ns[1] };
+        } else {
+          // L: wl [wl2 wl3...]  →  wavelength list / announcement
+          rec.wavelengths.push(...ns);
+        }
+        continue;
+      }
+
+      // --- Well plate line: <col>: TAB v1 TAB v2 ... ---
+      const wellM = f0.match(/^(\d+):$/);
+      if (wellM){
+        rec.wells.push({ column:+wellM[1], wavelength:pendingWl, excitation:pendingEx, values:f.slice(1).map(parseVal).filter(v=>v!==null) });
+        continue;
+      }
+
+      // --- Fluorescence value line: '.' or empty first field, followed by a single
+      //     value (a number, or "#SAT" → "saturated") ---
+      if (f0 === '.' || f0 === ''){
+        const vals = f.slice(1).map(parseVal).filter(v=>v!==null);
+        if (vals.length){
+          const pair = pendingPair || {};
+          rec.fluo.push({ ex:pair.ex??null, em:pair.em??null, value:vals[0] });
+          pendingPair = null;
+          continue;
+        }
+      }
+      // Unrecognised line — skip silently
+    }
+    return { records, kind:classify(records) };
+  }
+
+  function classify(records){
+    if (!records.length) return "empty";
+    const r0 = records[0];
+    if (r0.wells.length) return "plate";
+    if (r0.fluo.length || r0.ex.length) return "fluorescence";
+    if (r0.abs.length) return "absorbance";
+    return "unknown";
+  }
+
+  /* Flatten records into a row list + column set for tables/CSV.
+     plateGeom (optional): {startRow, startCol} to label wells A1.. */
+  function flatten(parsed, plateGeom=null){
+    const rows=[]; const cols=new Set();
+    const push=(o)=>{ rows.push(o); Object.keys(o).forEach(k=>cols.add(k)); };
+    for (const r of parsed.records){
+      const base={};
+      // r.wall (wall-clock at transfer) → "time"; r.time (device counter) → "ticks"
+      if (r.wall!=null) base.time=r.wall;
+      if (r.time!=null) base.ticks=r.time;
+      if (r.temp!=null) base.temp=r.temp;
+      for (const a of r.abs) push({...base, wavelength:a.wavelength,
+        absorbance:a.absorbance, transmittance:a.transmittance});
+      for (const f of r.fluo) push({...base,
+        ...(f.ex!=null?{ex_nm:f.ex}:{}), ...(f.em!=null?{em_nm:f.em}:{}), value:f.value});
+      for (const w of r.wells){
+        w.values.forEach((v,yi)=>{
+          const wl = w.wavelength != null ? w.wavelength : (r.wavelengths[0] ?? null);
+          const o={...base, ...(wl!=null?{wavelength:wl}:{}), ...(w.excitation!=null?{excitation:w.excitation}:{}),
+                   column:w.column, row_index:yi, value:v};
+          if (plateGeom){
+            const rowLetter=String.fromCharCode(65 + (plateGeom.startRow||0) + yi);
+            o.well = rowLetter + w.column;
+          }
+          push(o);
+        });
+      }
+    }
+    return { columns:orderColumns(cols), rows };
+  }
+
+  // Canonical column ordering for tables/CSV (used by flatten and the wellscan run layer)
+  const COL_ORDER=["time","ticks","temp","well","scan_pos","wavelength","excitation","ex_nm","em_nm",
+                   "column","row_index","absorbance","transmittance","value"];
+  function orderColumns(colsIterable){
+    return [...new Set(colsIterable)].sort((a,b)=>{
+      const ia=COL_ORDER.indexOf(a), ib=COL_ORDER.indexOf(b);
+      return (ia<0?99:ia)-(ib<0?99:ib);
+    });
+  }
+
+  return { parseTransfer, flatten, classify, orderColumns, _nums:nums };
+})();
+
+/* ===================================================================
+   Mode definitions — each builds a config form and a command sequence
+   =================================================================== */
+// helper builders for form fields
+const F = {
+  num(key, label, val, step=1, showIf=null){ return {type:"num",key,label,val,step,showIf}; },
+  text(key, label, val, showIf=null){ return {type:"text",key,label,val,showIf}; },
+  select(key, label, opts, val, showIf=null){ return {type:"select",key,label,opts,val,showIf}; },
+  bool(key, label, val=false, showIf=null){ return {type:"bool",key,label,val,showIf}; },
+  plate(key){ return {type:"plate",key}; },
+};
+// Tag one or more field descriptors so they show only for the given mode ids.
+const inModes = (modes, ...fields) => fields.map(f => ({...f, modes}));
+
+// ---- shared mode helpers ----
+// Allowed wavelength ranges (nm) by measurement type. Enforced in the hints below
+// (which both drive the banner and block the run on error) and shown in field labels.
+const WL_ABS=[200,1000], WL_EX=[250,850], WL_EM=[360,850], WL_LUM=[250,850];
+// Validate a space/comma-separated wavelength list against [min,max].
+function wlListHint(str, min, max, {what="Wavelength", maxN=null, allowZero=false}={}){
+  const ns=String(str==null?"":str).trim().split(/[\s,]+/).filter(Boolean).map(Number);
+  if(!ns.length) return {err:`Enter ${what.toLowerCase()} (nm)`};
+  if(ns.some(isNaN)) return {err:"Enter numbers only"};
+  if(maxN && ns.length>maxN) return {err:`Enter at most ${maxN} ${what.toLowerCase()} value${maxN!==1?"s":""}`};
+  for(const n of ns){
+    if(allowZero && n===0) continue;
+    if(n<min||n>max) return {err:`${what} ${n} out of range (${min}–${max}${allowZero?" or 0":""} nm)`};
+  }
+  return {info:`${ns.length} ${what.toLowerCase()} value${ns.length!==1?"s":""} · ${min}–${max} nm${allowZero?" (0 = all)":""}`};
+}
+// Validate a single fixed wavelength (sweep modes) against [min,max].
+function wlValHint(val, min, max, what){
+  const n=Number(val);
+  if(val===""||val==null||isNaN(n)) return {err:`${what} must be a number`};
+  if(n<min||n>max) return {err:`${what} ${n} out of range (${min}–${max} nm)`};
+  return null;
+}
+// The two fluorescence sweeps keep their own start/stop/step keys (so each has its
+// own defaults), while plain spectrum modes use the shared start/stop/step keys.
+function specVals(v){
+  if(v._mode==="em_sweep") return {start:+v.emStart, stop:+v.emStop, step:+v.emStep};
+  if(v._mode==="ex_sweep") return {start:+v.exStart, stop:+v.exStop, step:+v.exStep};
+  return {start:+v.start, stop:+v.stop, step:+v.step};
+}
+const specN = (v)=>{ const s=specVals(v); return Math.max(1, Math.round((s.stop-s.start)/s.step)+1); };
+// `!MODE EMSPECTRUM|EXSPECTRUM <start> <step> <n>` for the active sweep.
+const sweepModeCmd = (v, kind)=>{ const s=specVals(v); return `!MODE ${kind} ${s.start} ${s.step} ${specN(v)}`; };
+function specHint(v, what="Wavelength", min=WL_ABS[0], max=WL_ABS[1]){
+  const sv=specVals(v), s=sv.start, e=sv.stop, d=sv.step;
+  if(s<min||s>max) return {err:`${what} start must be ${min}–${max} nm (got ${s})`};
+  if(e<min||e>max) return {err:`${what} stop must be ${min}–${max} nm (got ${e})`};
+  if(e<=s)          return {err:"Stop must be greater than Start"};
+  if(d<1)           return {err:"Step must be ≥ 1 nm"};
+  const n=specN(v);
+  return {info:`${n} point${n!==1?"s":""} · ${min}–${max} nm`};
+}
+// Luminescence emission wavelength list: 1–4 values in WL_LUM (first may be 0 = all).
+function lumWlHint(v){
+  return wlListHint(v.wls, WL_LUM[0], WL_LUM[1], {what:"Emission", maxN:4, allowZero:true});
+}
+// Excitation + emission list validation for fluorescence/TRF endpoint·kinetic·wellscan.
+function fluoWlHint(v){
+  const ex=wlListHint(v.ex, WL_EX[0], WL_EX[1], {what:"Excitation", maxN:4});
+  if(ex.err) return ex;
+  const em=wlListHint(v.em, WL_EM[0], WL_EM[1], {what:"Emission", maxN:4});
+  if(em.err) return em;
+  return {info:`ex ${WL_EX[0]}–${WL_EX[1]} · em ${WL_EM[0]}–${WL_EM[1]} nm`};
+}
+// Full mode-aware hint for fluorescence/TRF (validates wavelengths + kinetic timing).
+function fluoHint(v){
+  if(v._mode==="kinetic"){
+    const k=kineticHint(v); if(k.err) return k;
+    const w=fluoWlHint(v);  if(w.err) return w;
+    return k;
+  }
+  if(v._mode==="em_sweep")  // sweep emission, fixed excitation
+    return wlValHint(v.exFixed, WL_EX[0], WL_EX[1], "Excitation") || specHint(v,"Emission",WL_EM[0],WL_EM[1]);
+  if(v._mode==="ex_sweep")  // sweep excitation, fixed emission
+    return wlValHint(v.emFixed, WL_EM[0], WL_EM[1], "Emission") || specHint(v,"Excitation",WL_EX[0],WL_EX[1]);
+  return fluoWlHint(v);     // endpoint, wellscan
+}
+// Full mode-aware hint for absorbance (wavelength list / spectrum + kinetic timing).
+function absHint(v, maxN){
+  if(v._mode==="spectrum") return specHint(v,"Wavelength",WL_ABS[0],WL_ABS[1]);
+  const w=wlListHint(v.wls, WL_ABS[0], WL_ABS[1], {what:"Wavelength", maxN});
+  if(v._mode==="kinetic"){
+    const k=kineticHint(v); if(k.err) return k;
+    if(w.err) return w;
+    return k;
+  }
+  return w;  // endpoint, wellscan
+}
+// Full mode-aware hint for luminescence (emission list / spectrum + kinetic timing).
+function lumHint(v){
+  if(v._mode==="spectrum") return specHint(v,"Emission",WL_LUM[0],WL_LUM[1]);
+  if(v._mode==="kinetic"){
+    const k=kineticHint(v); if(k.err) return k;
+    const w=lumWlHint(v);   if(w.err) return w;
+    return k;
+  }
+  return lumWlHint(v);  // endpoint, wellscan
+}
+const yFirst = (b)=>(11.235 + 9*((b&&b.r0)||0)).toFixed(3);
+
+// ---- kinetic timing (entered as hh:mm:ss; repeats are derived from total/interval) ----
+// Parse "hh:mm:ss" / "mm:ss" / "ss" into seconds; NaN if any part is non-numeric.
+function hms2sec(str){
+  const s=String(str==null?"":str).trim();
+  if(s==="") return NaN;
+  const parts=s.split(":").map(p=>p.trim());
+  if(parts.length>3 || parts.some(p=>p===""||isNaN(p)||+p<0)) return NaN;
+  return parts.reduce((acc,p)=>acc*60+ +p, 0);
+}
+const kineticCount=(v)=>{
+  const iv=hms2sec(v.interval), tt=hms2sec(v.totaltime);
+  if(!(iv>0)||!(tt>0)) return 1;
+  return Math.max(1, Math.round(tt/iv));
+};
+const kineticModeCmd=(v)=>`!MODE KINETIC ${hms2sec(v.interval)} ${kineticCount(v)}`;
+function kineticHint(v){
+  const iv=hms2sec(v.interval), tt=hms2sec(v.totaltime);
+  if(isNaN(iv)) return {err:"Interval must be hh:mm:ss"};
+  if(isNaN(tt)) return {err:"Total time must be hh:mm:ss"};
+  if(iv<=0)     return {err:"Interval must be greater than 0"};
+  if(tt<iv)     return {err:"Total time must be ≥ interval"};
+  // Plate kinetic only: shake-between-reads duration must fit inside the interval.
+  const sb=+v.shakeBetween||0;
+  if(sb>0 && sb>iv) return {err:`Shake time between reads (${sb}s) cannot exceed the interval (${iv}s)`};
+  const n=kineticCount(v);
+  return {info:`${n} read${n!==1?"s":""} · every ${iv}s over ${tt}s`};
+}
+// Plate shake setup. x1 = shake before first read; for kinetic, x4 = shake duration
+// between reads, x2 = interval (= x3+x4), x3 = wait before each between-read shake.
+function shakeCmds(v){
+  const x1 = Math.max(0, +v.shakeBefore || 0);
+  const x4 = v._mode==="kinetic" ? Math.max(0, +v.shakeBetween || 0) : 0;
+  if(x1===0 && x4===0) return ["!SHAKE OFF"];
+  let x2=0, x3=0;
+  if(x4>0){ x2 = Math.max(0, hms2sec(v.interval) || 0); x3 = Math.max(0, x2 - x4); }
+  return ["!SHAKE ON", `!SHAKE ${x1} ${x2} ${x3} ${x4} 0`];
+}
+// "Shake before first read" (all plate modes) + "Shake between reads" (kinetic only).
+const shakeFields = ()=>[
+  F.num("shakeBefore","Shake time before first read (s)",0,1),
+  ...inModes(["kinetic"], F.num("shakeBetween","Shake time between reads (s)",0,1)),
+];
+// reusable mode-list / field fragments
+const MODES_ABS = [{id:"endpoint",title:"Endpoint"},{id:"kinetic",title:"Kinetic"},{id:"spectrum",title:"Spectrum"}];
+const MODES_FLU = [{id:"endpoint",title:"Endpoint"},{id:"kinetic",title:"Kinetic"},
+                   {id:"em_sweep",title:"Emission sweep (fixed ex)"},{id:"ex_sweep",title:"Excitation sweep (fixed em)"}];
+const kineticFields = ()=>inModes(["kinetic"],
+  F.text("interval","Interval (hh:mm:ss)","00:00:10"),
+  F.text("totaltime","Total time (hh:mm:ss)","00:01:10"));
+const specFields = (modes, sLabel="Start (nm)", eLabel="Stop (nm)")=>
+  inModes(modes, F.num("start",sLabel,300), F.num("stop",eLabel,625), F.num("step","Step (nm)",25));
+// Fluorescence sweep spectra: emission sweep (fixed ex) and excitation sweep (fixed em)
+// each keep their own start/stop/step keys and defaults, with the swept axis' range.
+const sweepSpecFields = ()=>[
+  ...inModes(["em_sweep"], F.num("emStart","Start (nm, 360–850)",525), F.num("emStop","Stop (nm, 360–850)",625), F.num("emStep","Step (nm)",25)),
+  ...inModes(["ex_sweep"], F.num("exStart","Start (nm, 250–850)",400), F.num("exStop","Stop (nm, 250–850)",500), F.num("exStep","Step (nm)",25)),
+];
+// TRF gate timing: fixed dropdown choices; stop options are filtered to be > start.
+const TRF_STOP_OPTS = [250,450,650,850,1050,1250,1450];
+const trfTimeFields = ()=>[
+  { type:"select", key:"t0", label:"Gate start (µs)", opts:"0,50,250,450,650,850,1050,1250", val:"50", rerender:true },
+  { type:"select", key:"t1", label:"Gate end (µs)", val:"850",
+    optsFor:(s)=> TRF_STOP_OPTS.filter(x=> x > +s.t0).join(","),
+    defFor:(s)=> String(TRF_STOP_OPTS.find(x=> x > +s.t0) ?? TRF_STOP_OPTS[TRF_STOP_OPTS.length-1]) },
+];
+// PMT gain selector. In kinetic mode the gain must be fixed (auto re-adjusts per read,
+// which would make a time series non-comparable), so "auto" is dropped and the default
+// becomes medium. `modes` optionally restricts where the control appears.
+const pmtFields = (modes=null)=>{
+  const sel = { type:"select", key:"pmt", label:"PMT", val:"auto",
+    optsFor:(s)=> s._mode==="kinetic" ? "low,med,high,manual" : "auto,low,med,high,manual",
+    defFor:(s)=> s._mode==="kinetic" ? "med" : "auto" };
+  const volts = F.num("pmtv","PMT volts",600,1,v=>v.pmt==="manual");
+  return modes ? [{...sel,modes},{...volts,modes}] : [sel, volts];
+};
+
+// "Plate Bottom Reading" checkbox selects the read stage; default is top.
+const readstageCmd = (v)=> v.bottom ? "!READSTAGE BOT" : "!READSTAGE TOP";
+
+// ---- shared plate fluorescence/TRF sequence builders (FLU and TIME differ only in readtype) ----
+function plateBase(readtypeCmd, v, pmtAll=false){
+  const b=v.block||{r0:0,c0:0,rows:8,cols:12};
+  // Fluorescence/TRF expose the PMT selector in every mode, so always honor it (pmtAll).
+  // Luminescence only exposes it in kinetic; its other modes stay auto.
+  const pmt = (pmtAll || v._mode==="kinetic") ? pmtCmds(v) : ["!AUTOPMT ON"];
+  return ["!CLEAR DATA",readtypeCmd,readstageCmd(v),"!WELLSCANMODE",
+    "!XPOS 14.380 9 12",`!YPOS ${yFirst(b)} 9 ${b.rows}`,...shakeCmds(v),
+    `!STRIP ${b.c0+1} ${b.cols}`,"!CSPEED 8","!TOP ON",`!FPW ${v.fpw}`,...pmt];
+}
+function plateFluoSeq(readtypeCmd, v){
+  const base=plateBase(readtypeCmd, v, true);
+  const m=v._mode;
+  if(m==="endpoint"||m==="kinetic"){
+    const modeCmd = m==="kinetic" ? kineticModeCmd(v) : "!MODE ENDPOINT";
+    return [...base, `!EMWAVELENGTH ${cleanNums(v.em)}`, ...emFilterCmds(v),
+      `!EXWAVELENGTH ${cleanNums(v.ex)}`,
+      "!PMTCAL ON",modeCmd,"!ORDER COLUMN"];
+  }
+  if(m==="em_sweep")
+    return [...base, `!EXWAVELENGTH ${cleanNums(v.exFixed)}`,"!AUTOFILTER OFF",`!EMFILTER ${sweepEmFilter(v)}`,
+      "!PMTCAL ON",sweepModeCmd(v,"EMSPECTRUM"),"!ORDER WAVELENGTH"];
+  // ex_sweep
+  return [...base, `!EMWAVELENGTH ${cleanNums(v.emFixed)}`,"!AUTOFILTER OFF",`!EMFILTER ${sweepEmFilter(v)}`,
+    autoExFilterCmd(v),"!PMTCAL ON",sweepModeCmd(v,"EXSPECTRUM"),"!ORDER WAVELENGTH"];
+}
+function plateFluoWellscan(readtypeCmd, v){
+  const b=v.block||{r0:0,c0:0,rows:8,cols:12};
+  return {
+    preamble:["!CLEAR DATA",readtypeCmd,readstageCmd(v),"!WELLSCANMODE"],
+    firstSetup:[...shakeCmds(v),`!STRIP ${b.c0+1} ${b.cols}`,"!CSPEED 8","!TOP ON",
+      `!FPW ${v.fpw}`,...pmtCmds(v),`!EMWAVELENGTH ${cleanNums(v.em)}`, ...emFilterCmds(v),
+      `!EXWAVELENGTH ${cleanNums(v.ex)}`,
+      "!PMTCAL ON","!MODE ENDPOINT","!ORDER WAVELENGTH"],
+    recalib:"!PMTCAL OFF", block:b,
+  };
+}
+const plateChart = (m)=> m==="kinetic" ? "plate_kinetic"
+                      : m==="spectrum"||m==="em_sweep" ? "plate_spectrum_em"
+                      : m==="ex_sweep" ? "plate_spectrum_ex"
+                      : m==="wellscan" ? "plate_wellscan"
+                      : "plate";   // endpoint
+// EmFilter wheel: filter number (1..16) <-> emission wavelength, from the xlsx EmFilter tab.
+const EMFILTERS = [
+  {n:1,label:"no filter"},{n:16,wl:325},{n:2,wl:420},{n:3,wl:435},{n:4,wl:455},
+  {n:5,wl:475},{n:6,wl:495},{n:7,wl:515},{n:8,wl:530},{n:9,wl:550},{n:10,wl:570},
+  {n:11,wl:590},{n:12,wl:610},{n:13,wl:630},{n:14,wl:665},{n:15,wl:695},
+];
+const emfLabel = (f)=> f.label || `${f.wl} nm`;
+const EMFILTER_OPTS = EMFILTERS.map(emfLabel).join(",");
+const emfilterNum = (label)=>{ const f=EMFILTERS.find(x=>emfLabel(x)===label); return f?f.n:1; };
+// Number of em/ex pairs entered (drives how many filter dropdowns are shown).
+const pairCount = (v)=> Math.min(4, Math.max(1, String(v.em||"").trim().split(/[\s,]+/).filter(Boolean).length));
+// Up to four emission-filter dropdowns (one per pair). Dropdown 1 is always shown;
+// dropdown i appears only when the user has entered at least i emission/excitation pairs.
+const emFilterFields = (modes)=> [1,2,3,4].map(i=> ({
+  type:"select", key:"emfilter"+i, label:`Emission longpass filter (pair ${i})`,
+  opts:EMFILTER_OPTS, val: i===2 ? "590 nm" : "515 nm", modes,
+  showIf: i===1 ? null : (s)=> pairCount(s) >= i,
+}));
+// Space-separated EmFilter numbers for the active pairs, in pair order.
+const emFilterNums = (v)=>{
+  const out=[];
+  for(let i=1;i<=pairCount(v);i++) out.push(emfilterNum(v["emfilter"+i]));
+  return out.join(" ");
+};
+// Excitation-filter mode for the fixed-emission excitation sweep (checkbox).
+const autoExFilterCmd = (v)=> v.autoexfilter ? "!AUTOFILTER EX ON" : "!AUTOFILTER EX OFF";
+const autoExFilterField = ()=> F.bool("autoexfilter","Auto excitation filter",false);
+// Sweep modes have a single emission filter (one setting) rather than the per-pair list.
+const sweepEmFilterField = ()=> ({ type:"select", key:"emfilterSweep", label:"Emission longpass filter",
+  opts:EMFILTER_OPTS, val:"515 nm" });
+const sweepEmFilter = (v)=> emfilterNum(v.emfilterSweep);
+
+// Endpoint/kinetic/wellscan accept up to 4 ex/em pairs; the sweep modes fix a single
+// wavelength on the non-swept axis (one excitation for an emission sweep, one emission
+// for an excitation sweep) plus a single emission filter.
+const fluoExEmFields = ()=>[
+  ...inModes(["endpoint","kinetic","wellscan"], F.text("ex","Excitation (nm, up to 4; 250–850)","485 485")),
+  ...inModes(["endpoint","kinetic","wellscan"], F.text("em","Emission (nm, up to 4; 360–850)","525 600")),
+  ...emFilterFields(["endpoint","kinetic","wellscan"]),
+  ...inModes(["em_sweep"], F.num("exFixed","Excitation (nm, 250–850)",485)),
+  ...inModes(["ex_sweep"], F.num("emFixed","Emission (nm, 360–850)",525)),
+  ...inModes(["em_sweep","ex_sweep"], sweepEmFilterField()),
+];
+
+/* Each entry = one left-pane read type. `modes` populate the right-pane selector;
+   the active mode lives in form state as v._mode. build/reads/chart/hint read v._mode.
+   Wellscan-capable read types also provide wellscan(v) -> {preamble, firstSetup, recalib, block}. */
+const READTYPES = [
+  // ---------- Cuvette absorbance ----------
+  { group:"Cuvette", id:"cuv_abs", title:"Absorbance", sample:"cuvette",
+    desc:"Absorbance in a cuvette.", modes:MODES_ABS,
+    fields:[ ...inModes(["endpoint","kinetic"], F.text("wls","Wavelengths (nm, up to 6; 200–1000)","426 500")),
+             ...kineticFields(),
+             ...specFields(["spectrum"],"Start (nm, 200–1000)","Stop (nm, 200–1000)") ],
+    hint:(v)=> absHint(v,6),
+    chart:(v)=> v._mode==="kinetic" ? "kinetic" : v._mode==="spectrum" ? "spectrum" : "abs",
+    reads:(v)=> v._mode==="kinetic" ? kineticCount(v) : v._mode==="spectrum" ? specN(v) : 1,
+    build:(v)=>{
+      const base=["!CLEAR DATA","!READTYPE ABSCUV"];
+      if(v._mode==="spectrum") return [...base, `!MODE SPECTRUM ${v.start} ${v.step} ${specN(v)}`,"!SPEED OFF"];
+      const modeCmd = v._mode==="kinetic" ? kineticModeCmd(v) : "!MODE ENDPOINT";
+      return [...base, `!WAVELENGTH ${cleanNums(v.wls)}`, modeCmd, "!SPEED OFF"];
+    },
+  },
+  // ---------- Cuvette fluorescence ----------
+  { group:"Cuvette", id:"cuv_fluo", title:"Fluorescence", sample:"cuvette",
+    desc:"Fluorescence in a cuvette.", modes:MODES_FLU,
+    fields:[ ...inModes(["endpoint","kinetic"], F.text("ex","Excitation (nm, up to 4; 250–850)","485")),
+             ...inModes(["endpoint","kinetic"], F.text("em","Emission (nm, up to 4; 360–850)","525")),
+             ...emFilterFields(["endpoint","kinetic"]),
+             ...inModes(["em_sweep"], F.num("exFixed","Excitation (nm, 250–850)",485)),
+             ...inModes(["ex_sweep"], F.num("emFixed","Emission (nm, 360–850)",525)),
+             ...inModes(["em_sweep","ex_sweep"], sweepEmFilterField()),
+             F.num("fpw","Flashes/read",6),
+             ...pmtFields(),
+             ...kineticFields(),
+             ...sweepSpecFields(),
+             ...inModes(["ex_sweep"], autoExFilterField()) ],
+    hint:fluoHint,
+    chart:(v)=> v._mode==="em_sweep" ? "spectrum_em" : v._mode==="ex_sweep" ? "spectrum_ex" : "none",
+    reads:(v)=> v._mode==="kinetic" ? kineticCount(v) : (v._mode==="em_sweep"||v._mode==="ex_sweep") ? specN(v) : 1,
+    build:(v)=>{
+      const base=["!CLEAR DATA","!READTYPE FLUCUV",`!FPW ${v.fpw}`,...pmtCmds(v)];
+      if(v._mode==="em_sweep")
+        return [...base, `!EXWAVELENGTH ${cleanNums(v.exFixed)}`,"!AUTOFILTER OFF",`!EMFILTER ${sweepEmFilter(v)}`,
+                sweepModeCmd(v,"EMSPECTRUM")];
+      if(v._mode==="ex_sweep")
+        return [...base, `!EMWAVELENGTH ${cleanNums(v.emFixed)}`,"!AUTOFILTER OFF",`!EMFILTER ${sweepEmFilter(v)}`,
+                autoExFilterCmd(v),sweepModeCmd(v,"EXSPECTRUM")];
+      const modeCmd = v._mode==="kinetic" ? kineticModeCmd(v) : "!MODE ENDPOINT";
+      return [...base, `!EMWAVELENGTH ${cleanNums(v.em)}`, ...emFilterCmds(v),
+              `!EXWAVELENGTH ${cleanNums(v.ex)}`, modeCmd];
+    },
+  },
+  // ---------- Plate absorbance ----------
+  { group:"Plate (96-well)", id:"pla_abs", title:"Absorbance", sample:"plate",
+    desc:"Absorbance of a rectangular block of wells.",
+    modes:[...MODES_ABS, {id:"wellscan",title:"Wellscan"}],
+    fields:[ ...inModes(["endpoint","kinetic","wellscan"], F.text("wls","Wavelengths (nm, 200–1000)","405 500")),
+             ...kineticFields(),
+             ...specFields(["spectrum"],"Start (nm, 200–1000)","Stop (nm, 200–1000)"),
+             ...shakeFields(),
+             F.plate("block") ],
+    hint:(v)=> absHint(v),
+    chart:(v)=> plateChart(v._mode),
+    reads:(v)=> v._mode==="kinetic" ? kineticCount(v) : v._mode==="spectrum" ? specN(v) : v._mode==="wellscan" ? 9 : 1,
+    build:(v)=>{
+      const b=v.block||{r0:0,c0:0,rows:8,cols:12};
+      const base=["!CLEAR DATA","!READTYPE ABSPLA","!WELLSCANMODE",
+        "!XPOS 14.380 9 12",`!YPOS ${yFirst(b)} 9 ${b.rows}`,...shakeCmds(v),
+        `!STRIP ${b.c0+1} ${b.cols}`,"!CSPEED 8"];
+      if(v._mode==="spectrum")
+        return [...base,"!CALIBRATE ONCE",`!MODE SPECTRUM ${v.start} ${v.step} ${specN(v)}`,"!ORDER WAVELENGTH","!SPEED OFF"];
+      const modeCmd = v._mode==="kinetic" ? kineticModeCmd(v) : "!MODE ENDPOINT";
+      return [...base, `!WAVELENGTH ${cleanNums(v.wls)}`,"!CALIBRATE ONCE",modeCmd,"!ORDER COLUMN","!SPEED OFF"];
+    },
+    wellscan:(v)=>{
+      const b=v.block||{r0:0,c0:0,rows:8,cols:12};
+      return {
+        preamble:["!CLEAR DATA","!READTYPE ABSPLA","!WELLSCANMODE"],
+        firstSetup:[...shakeCmds(v),`!STRIP ${b.c0+1} ${b.cols}`,"!CSPEED 8",
+          `!WAVELENGTH ${cleanNums(v.wls)}`,"!CALIBRATE ONCE","!MODE ENDPOINT","!ORDER WAVELENGTH","!SPEED OFF"],
+        recalib:"!PMTCAL OFF", block:b,
+      };
+    },
+  },
+  // ---------- Plate fluorescence ----------
+  { group:"Plate (96-well)", id:"pla_fluo", title:"Fluorescence", sample:"plate",
+    desc:"Fluorescence of a well block.",
+    modes:[...MODES_FLU, {id:"wellscan",title:"Wellscan"}],
+    fields:[ ...fluoExEmFields(),
+             F.num("fpw","Flashes/read",6),
+             ...pmtFields(),
+             ...kineticFields(),
+             ...sweepSpecFields(),
+             ...inModes(["ex_sweep"], autoExFilterField()),
+             F.bool("bottom","Plate Bottom Reading",false),
+             ...shakeFields(),
+             F.plate("block") ],
+    hint:fluoHint,
+    chart:(v)=> plateChart(v._mode),
+    reads:(v)=> v._mode==="kinetic" ? kineticCount(v) : (v._mode==="em_sweep"||v._mode==="ex_sweep") ? specN(v) : v._mode==="wellscan" ? 9 : 1,
+    build:(v)=> plateFluoSeq("!READTYPE FLU", v),
+    wellscan:(v)=> plateFluoWellscan("!READTYPE FLU", v),
+  },
+  // ---------- Plate luminescence ----------
+  { group:"Plate (96-well)", id:"pla_lum", title:"Luminescence", sample:"plate",
+    desc:"Glow luminescence of a well block (no excitation).",
+    modes:[...MODES_ABS, {id:"wellscan",title:"Wellscan"}],
+    fields:[ ...inModes(["endpoint","kinetic","wellscan"], F.text("wls","Emission wavelengths (1–4; 250–850; first may be 0 for all)","0")),
+             { type:"num", key:"fpw", label:"Reads", val:30, step:1, min:1, max:30,
+               note:"Maximum 30 reads (≈ 5 s integration time)" },
+             ...pmtFields(["kinetic"]),
+             ...kineticFields(),
+             ...specFields(["spectrum"],"Em start (nm, 250–850)","Em stop (nm, 250–850)"),
+             F.bool("bottom","Plate Bottom Reading",false),
+             ...shakeFields(),
+             F.plate("block") ],
+    hint:lumHint,
+    chart:(v)=> plateChart(v._mode),
+    reads:(v)=> v._mode==="kinetic" ? kineticCount(v) : v._mode==="spectrum" ? specN(v) : v._mode==="wellscan" ? 9 : 1,
+    build:(v)=>{
+      const base=plateBase("!READTYPE LUM", v);
+      if(v._mode==="spectrum")
+        return [...base,"!PMTCAL ON",`!MODE EMSPECTRUM ${v.start} ${v.step} ${specN(v)}`,"!ORDER WAVELENGTH"];
+      const modeCmd = v._mode==="kinetic" ? kineticModeCmd(v) : "!MODE ENDPOINT";
+      return [...base, `!EMWAVELENGTH ${cleanNums(v.wls)}`,"!PMTCAL ON",modeCmd,"!ORDER COLUMN"];
+    },
+    wellscan:(v)=>{
+      const b=v.block||{r0:0,c0:0,rows:8,cols:12};
+      return {
+        preamble:["!CLEAR DATA","!READTYPE LUM",readstageCmd(v),"!WELLSCANMODE"],
+        firstSetup:[...shakeCmds(v),`!STRIP ${b.c0+1} ${b.cols}`,"!CSPEED 8","!TOP ON",
+          `!FPW ${v.fpw}`,"!AUTOPMT ON",`!EMWAVELENGTH ${cleanNums(v.wls)}`,"!PMTCAL ON","!MODE ENDPOINT","!ORDER WAVELENGTH"],
+        recalib:"!PMTCAL OFF", block:b,
+      };
+    },
+  },
+  // ---------- Plate time-resolved fluorescence ----------
+  { group:"Plate (96-well)", id:"pla_trf", title:"Time-resolved fluorescence (TRF)", sample:"plate",
+    desc:"TRF read of a well block (gated time window).",
+    modes:[...MODES_FLU, {id:"wellscan",title:"Wellscan"}],
+    fields:[ ...trfTimeFields(),
+             ...fluoExEmFields(),
+             F.num("fpw","Flashes/read",20),
+             ...pmtFields(),
+             ...kineticFields(),
+             ...sweepSpecFields(),
+             ...inModes(["ex_sweep"], autoExFilterField()),
+             F.bool("bottom","Plate Bottom Reading",false),
+             ...shakeFields(),
+             F.plate("block") ],
+    hint:fluoHint,
+    chart:(v)=> plateChart(v._mode),
+    reads:(v)=> v._mode==="kinetic" ? kineticCount(v) : (v._mode==="em_sweep"||v._mode==="ex_sweep") ? specN(v) : v._mode==="wellscan" ? 9 : 1,
+    build:(v)=> plateFluoSeq(`!READTYPE TIME ${v.t0} ${v.t1}`, v),
+    wellscan:(v)=> plateFluoWellscan(`!READTYPE TIME ${v.t0} ${v.t1}`, v),
+  },
+];
+
+// ---- command helpers shared by modes ----
+function cleanNums(s){ return String(s).trim().split(/[\s,]+/).filter(Boolean).join(" "); }
+function pmtCmds(v){
+  if (!v.pmt || v.pmt==="auto") return ["!AUTOPMT ON"];
+  if (v.pmt==="manual") return ["!AUTOPMT OFF",`!PMT ${v.pmtv}`];
+  return ["!AUTOPMT OFF",`!PMT ${v.pmt.toUpperCase()}`];
+}
+function emFilterCmds(v){
+  return ["!AUTOFILTER OFF",`!EMFILTER ${emFilterNums(v)}`];
+}
+// 96-well geometry: XPOS always describes full strips (14.38 9 12);
+// STRIP selects the X subset; YPOS sets the Y rows to read (see yFirst()).
+
+/* ===================================================================
+   Charts — minimal hand-rolled canvas renderers (no dependencies)
+   =================================================================== */
+function lineChart(parent, series, {xlabel="",ylabel=""}={}){
+  const W=620,H=300,pad=46;
+  const cv=el("canvas",{width:W,height:H}); parent.append(cv);
+  const ctx=cv.getContext("2d");
+  const xs=series.flatMap(s=>s.points.map(p=>p[0]));
+  const ys=series.flatMap(s=>s.points.map(p=>p[1]));
+  if(!xs.length) return;
+  const xmin=Math.min(...xs),xmax=Math.max(...xs),ymin=Math.min(...ys),ymax=Math.max(...ys);
+  const xr=(xmax-xmin)||1, yr=(ymax-ymin)||1;
+  const X=x=>pad+(x-xmin)/xr*(W-pad-16);
+  const Y=y=>H-pad-(y-ymin)/yr*(H-pad-20);
+  const css=getComputedStyle(document.documentElement);
+  ctx.strokeStyle=css.getPropertyValue("--line"); ctx.fillStyle=css.getPropertyValue("--muted");
+  ctx.font="11px system-ui"; ctx.lineWidth=1;
+  // axes + ticks
+  ctx.beginPath(); ctx.moveTo(pad,16); ctx.lineTo(pad,H-pad); ctx.lineTo(W-12,H-pad); ctx.stroke();
+  for(let i=0;i<=5;i++){
+    const fx=xmin+xr*i/5, fy=ymin+yr*i/5;
+    ctx.fillText(fmtTick(fx), X(fx)-12, H-pad+14);
+    ctx.fillText(fmtTick(fy), 4, Y(fy)+3);
+  }
+  ctx.fillText(xlabel, W/2-20, H-6);
+  ctx.save(); ctx.translate(12,H/2); ctx.rotate(-Math.PI/2); ctx.fillText(ylabel,0,0); ctx.restore();
+  const colors=["#3da9fc","#3fb950","#d29922","#f85149","#bc8cff","#56d4dd"];
+  series.forEach((s,i)=>{
+    ctx.strokeStyle=colors[i%colors.length]; ctx.fillStyle=ctx.strokeStyle; ctx.lineWidth=2;
+    ctx.beginPath();
+    s.points.forEach((p,j)=>{ const x=X(p[0]),y=Y(p[1]); j?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.stroke();
+    s.points.forEach(p=>{ ctx.beginPath(); ctx.arc(X(p[0]),Y(p[1]),2.5,0,7); ctx.fill(); });
+  });
+  // legend
+  ctx.font="12px system-ui";
+  series.forEach((s,i)=>{ ctx.fillStyle=colors[i%colors.length];
+    ctx.fillText("■ "+s.label, W-150, 24+i*16); });
+}
+function fmtTick(v){ return Math.abs(v)>=1000? v.toFixed(0) : (Math.abs(v)<1? v.toFixed(3): v.toFixed(1)); }
+// Wall-clock timestamp for the "time" column: mm/dd/yy HH:mm:ss (24-hour).
+function fmtWall(d=new Date()){
+  const p=n=>String(n).padStart(2,"0");
+  return `${p(d.getMonth()+1)}/${p(d.getDate())}/${p(d.getFullYear()%100)} `+
+         `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+// scale (optional): {lo,hi} color-scale bounds. Defaults to the data's own min/max.
+// Saturated wells always render as the top-of-scale color (red).
+function plateHeatmap(parent, flat, block, scale){
+  const rows=block.rows, cols=block.cols, r0=block.r0||0, c0=block.c0||0;
+  const cell=44, padL=28, padT=22;
+  const cv=el("canvas",{width:padL+cols*cell+10, height:padT+rows*cell+10});
+  parent.append(cv); const ctx=cv.getContext("2d");
+  const vals=flat.rows.map(r=>r.value).filter(v=>typeof v==="number");
+  const vmin = scale ? scale.lo : Math.min(...vals);
+  const vmax = scale ? scale.hi : Math.max(...vals);
+  const vr=(vmax-vmin)||1;
+  ctx.font="11px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle";
+  // map (column, row_index) -> value
+  const map=new Map();
+  for(const r of flat.rows) map.set(`${r.column}|${r.row_index}`, r.value);
+  for(let yi=0; yi<rows; yi++){
+    ctx.fillStyle="#8b98a8";
+    ctx.fillText(String.fromCharCode(65+r0+yi), padL-14, padT+yi*cell+cell/2);
+    for(let xi=0; xi<cols; xi++){
+      const col=c0+1+xi;
+      if(yi===0){ ctx.fillStyle="#8b98a8"; ctx.fillText(col, padL+xi*cell+cell/2, padT-10); }
+      const v=map.get(`${col}|${yi}`);
+      const x=padL+xi*cell, y=padT+yi*cell;
+      const sat=(v!==undefined && typeof v!=="number");
+      const t = sat ? 1 : (v-vmin)/vr;   // saturated → top of scale (red)
+      if(v===undefined){ ctx.fillStyle="#0c1117"; }
+      else { ctx.fillStyle=heat(t); }
+      ctx.fillRect(x+1,y+1,cell-2,cell-2);
+      if(sat){ ctx.fillStyle="#08121c"; ctx.fillText("SAT", x+cell/2, y+cell/2); }
+      else if(v!==undefined){ ctx.fillStyle = t>0.55?"#08121c":"#e6edf3";
+        ctx.fillText(fmtTick(v), x+cell/2, y+cell/2); }
+    }
+  }
+}
+// Wellscan variant: each well is a 3×3 grid of its 9 scan positions, filled in
+// reading order (scan_pos 1 = top-left, 5 = center, 9 = bottom-right), the whole
+// grid fitting inside one well's cell. Color scale spans all positions of all wells.
+function plateHeatmapWellscan(parent, flat, block, scale){
+  const rows=block.rows, cols=block.cols, r0=block.r0||0, c0=block.c0||0;
+  const cell=44, padL=28, padT=22, gap=3;     // gap = margin around the 3×3 inside a well
+  const subN=(cell-2*gap)/3;                   // size of one scan-position square
+  const cv=el("canvas",{width:padL+cols*cell+10, height:padT+rows*cell+10});
+  parent.append(cv); const ctx=cv.getContext("2d");
+  const vals=flat.rows.map(r=>r.value).filter(v=>typeof v==="number");
+  const vmin = scale ? scale.lo : Math.min(...vals);
+  const vmax = scale ? scale.hi : Math.max(...vals);
+  const vr=(vmax-vmin)||1;
+  ctx.font="11px system-ui"; ctx.textAlign="center"; ctx.textBaseline="middle";
+  // map (column, row_index, scan_pos) -> value
+  const map=new Map();
+  for(const r of flat.rows) map.set(`${r.column}|${r.row_index}|${r.scan_pos}`, r.value);
+  for(let yi=0; yi<rows; yi++){
+    ctx.fillStyle="#8b98a8";
+    ctx.fillText(String.fromCharCode(65+r0+yi), padL-14, padT+yi*cell+cell/2);
+    for(let xi=0; xi<cols; xi++){
+      const col=c0+1+xi;
+      if(yi===0){ ctx.fillStyle="#8b98a8"; ctx.fillText(col, padL+xi*cell+cell/2, padT-10); }
+      const x0=padL+xi*cell, y0=padT+yi*cell;
+      ctx.fillStyle="#0c1117"; ctx.fillRect(x0+1,y0+1,cell-2,cell-2);  // well backdrop
+      for(let p=1;p<=9;p++){
+        const v=map.get(`${col}|${yi}|${p}`);
+        if(v===undefined) continue;
+        const sc=(p-1)%3, sr=Math.floor((p-1)/3);
+        // saturated scan position → top of scale (red); numeric → heat color
+        ctx.fillStyle = (typeof v!=="number") ? heat(1) : heat((v-vmin)/vr);
+        ctx.fillRect(x0+gap+sc*subN, y0+gap+sr*subN, subN-1, subN-1);
+      }
+    }
+  }
+}
+function heat(t){ // blue -> green -> yellow -> red
+  t=Math.max(0,Math.min(1,t));
+  const stops=[[13,71,161],[63,185,80],[210,153,34],[248,81,73]];
+  const seg=t*3, i=Math.min(2,Math.floor(seg)), f=seg-i;
+  const a=stops[i],b=stops[i+1];
+  return `rgb(${a.map((c,k)=>Math.round(c+(b[k]-c)*f)).join(",")})`;
+}
+
+/* ===================================================================
+   CSV export
+   =================================================================== */
+function toCSV(meta, flat){
+  const lines=[];
+  for(const [k,v] of Object.entries(meta)) lines.push(`# ${k},${csvCell(v)}`);
+  lines.push(flat.columns.join(","));
+  for(const row of flat.rows) lines.push(flat.columns.map(c=>csvCell(row[c])).join(","));
+  return lines.join("\r\n");
+}
+function csvCell(v){
+  if (v===undefined||v===null) return "";
+  const s=String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+}
+function downloadCSV(text, filename){
+  const blob=new Blob([text],{type:"text/csv"});
+  const a=el("a",{href:URL.createObjectURL(blob), download:filename});
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ===================================================================
+   UI wiring
+   =================================================================== */
+const link = new SerialLink();
+const dev  = new M2e(link);
+let currentMode = READTYPES[0];
+let lastFlat = null, lastMeta = null;
+let lastChart = null;   // {kind, v, parsed} of the most recent render — for heatmap redraws
+const formState = {};   // per-mode field values
+const plateState = {};  // per-mode plate block selection
+// Heatmap color-scale control. domain = data min/max; lo/hi = user-chosen bounds
+// (within the domain). userSet stays false until the user drags a handle, so the
+// scale auto-tracks the full data range until then.
+let heatScale = { min:0, max:1, lo:0, hi:1, userSet:false };
+
+function serialOpts(){
+  return {
+    baudRate:+$("baud").value, dataBits:+$("dataBits").value,
+    stopBits:+$("stopBits").value, parity:$("parity").value,
+  };
+}
+
+let busy=false;          // true while a measurement is running (pauses idle polling)
+let pollTimer=null;
+let lastStatusRaw="";    // raw !STATUS response; updated by refreshStatus; read by runSequence
+
+function setConnected(on){
+  $("connState").textContent = on?"connected":"disconnected";
+  $("connState").className = "pill "+(on?"on":"off");
+  $("btnConnect").disabled=on; $("btnDisconnect").disabled=!on;
+  for(const id of ["btnOpen","btnClose","btnSetTemp","btnTempOff","btnShakeNow","btnShakeStop",
+                   "btnRun","termInput","termSend"]) $(id).disabled=!on;
+}
+
+// poll the machine every 4 s while idle to keep status + temperature current
+function startPolling(){
+  stopPolling();
+  pollTimer = setInterval(idleTick, 2000);
+}
+function stopPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
+async function idleTick(){
+  if(!link.connected || busy || idleTick._running) return;
+  idleTick._running=true;
+  try { await refreshStatus(); } finally { idleTick._running=false; }
+}
+
+function applyCmdDelay(){ const n=+$("cmdDelay").value; link.cmdDelay = isNaN(n) ? 50 : Math.max(0, n); }
+
+async function doConnect(){
+  applyCmdDelay();
+  try{ await link.connect(serialOpts()); setConnected(true); await refreshStatus(); startPolling(); }
+  catch(e){ logLine("connect failed: "+e.message,"err"); toast("Connect failed: "+e.message); }
+}
+async function doDisconnect(){ stopPolling(); await link.disconnect(); setConnected(false);
+  $("machineState").textContent="—"; $("machineState").className="pill off";
+  $("drawerState").textContent="—"; $("drawerState").className="pill off";
+  $("tempReadout").textContent="—"; }
+
+async function refreshStatus(){
+  // Reentrancy guard: idle polling and the live-measurement timer both call this; only
+  // one status+temp pair should be in flight at a time (the queue also coalesces them).
+  if(refreshStatus._running) return;
+  refreshStatus._running=true;
+  try{
+    const s=await dev.status();
+    lastStatusRaw = s.raw;
+    const measuring   = /MEASURING/i.test(s.raw);
+    const calibrating = /\bCAL\b/i.test(s.raw);
+    const idle        = /IDLE/i.test(s.raw);
+    const open        = /OPEN/i.test(s.raw);
+    const closed      = /CLOSED/i.test(s.raw);
+
+    const ms=$("machineState");
+    ms.textContent = measuring?"measuring": calibrating?"calibrating": idle?"idle":"?";
+    ms.className   = "pill "+(measuring||calibrating?"busy": idle?"on":"off");
+
+    const ds=$("drawerState");
+    ds.textContent = open?"open": closed?"closed":"?";
+    ds.className   = "pill "+(open?"busy": closed?"on":"off"); // open=orange, closed=green
+
+    await refreshTemp();
+  }catch(e){ logLine("status error: "+e.message,"err"); }
+  finally{ refreshStatus._running=false; }
+}
+async function refreshTemp(){
+  try{
+    const t=await dev.temp();
+    // Response format: "setpoint. unknown. current."  (three period-delimited values)
+    // The middle value is unidentified — captured but not yet used.
+    const m = t.raw.match(/(-?\d+(?:\.\d+)?)\.?\s+(-?\d+(?:\.\d+)?)\.?\s+(-?\d+(?:\.\d+)?)/);
+    if(m){
+      const setpoint = parseFloat(m[1]);
+      // m[2] is an unknown intermediate temperature, reserved for future use
+      const current  = parseFloat(m[3]);
+      $("tempReadout").textContent = setpoint === 0
+        ? `${current.toFixed(1)}°C`
+        : `${current.toFixed(1)}°C (set ${setpoint.toFixed(1)})`;
+    } else $("tempReadout").textContent = t.raw.replace(/[>\n\r]/g," ").trim().slice(0,40);
+  }catch(_){}
+}
+
+/* ---- read-type list (left pane) + mode selector + form (right pane) ---- */
+function buildModeList(){
+  const host=$("modeList"); let lastGroup="";
+  for(const m of READTYPES){
+    if(m.group!==lastGroup){ host.append(el("div",{class:"grouphead"},m.group)); lastGroup=m.group; }
+    const b=el("button",{class:"mode"+(m.id===currentMode.id?" active":""),
+      onclick:()=>selectMode(m.id)}, m.title);
+    b.dataset.id=m.id; host.append(b);
+  }
+}
+function selectMode(id){
+  currentMode = READTYPES.find(m=>m.id===id);
+  document.querySelectorAll(".modes button").forEach(b=>
+    b.classList.toggle("active", b.dataset.id===id));
+  renderForm();
+  $("resultsCard").hidden=true; lastFlat=null; $("btnCsv").disabled=true;
+}
+// Form state for the active read type; v._mode holds the selected right-pane mode.
+function currentState(){
+  const state = formState[currentMode.id] ||= {};
+  if(!state._mode || !currentMode.modes.some(m=>m.id===state._mode))
+    state._mode = currentMode.modes[0].id;
+  return state;
+}
+function renderForm(){
+  const state = currentState();
+  const activeMode = currentMode.modes.find(m=>m.id===state._mode);
+  $("modeTitle").textContent=currentMode.title;
+  $("modeDesc").textContent=currentMode.desc;
+  const host=$("modeForm"); host.replaceChildren();
+
+  // Mode selector (right-pane segmented control) — only when >1 mode
+  if(currentMode.modes.length>1){
+    const sel=el("div",{class:"modeselect"});
+    for(const m of currentMode.modes){
+      const b=el("button",{class:"mode-pill"+(m.id===state._mode?" active":""),
+        onclick:()=>{ state._mode=m.id; renderForm();
+          $("resultsCard").hidden=true; lastFlat=null; $("btnCsv").disabled=true; }}, m.title);
+      sel.append(b);
+    }
+    host.append(sel);
+  }
+
+  const grid=el("div",{class:"grid3"});
+  const conditionals = [];   // {f, wrap} pairs re-evaluated on every input change
+
+  // Hint/validation banner (hint(state) may return null → no banner)
+  const hintDiv=el("div",{class:"form-hint"});
+  const updateHint=()=>{
+    const h=currentMode.hint ? currentMode.hint(state) : null;
+    if(!h){ hintDiv.style.display="none"; return; }
+    hintDiv.style.display=""; hintDiv.className="form-hint "+(h.err?"err":"info");
+    hintDiv.textContent=h.err?"⚠ "+h.err : h.info||"";
+  };
+  function onAnyChange(){
+    for(const {f,wrap} of conditionals) wrap.style.display=f.showIf(state)?'':'none';
+    updateHint();
+  }
+
+  // Fields tagged with `modes` show only for the active mode.
+  const visible = currentMode.fields.filter(f=> !f.modes || f.modes.includes(state._mode));
+  for(const f of visible){
+    if(f.type==="plate"){ host.append(buildPlate()); continue; }
+    if(state[f.key]===undefined) state[f.key]=f.val;
+    if(f.type==="bool"){
+      const wrap=el("div",{class:"field check"});
+      const lbl=el("label",{class:"checkbox"});
+      const input=el("input",{type:"checkbox"});
+      input.checked=!!state[f.key];
+      input.addEventListener("change",()=>{ state[f.key]=input.checked; onAnyChange(); });
+      lbl.append(input, document.createTextNode(" "+f.label));
+      wrap.append(lbl);
+      if(f.showIf){ conditionals.push({f,wrap}); wrap.style.display=f.showIf(state)?'':'none'; }
+      grid.append(wrap);
+      continue;
+    }
+    const wrap=el("div",{class:"field"}); wrap.append(el("label",{},f.label));
+    let input;
+    if(f.type==="select"){
+      // options may depend on the active mode (optsFor); coerce an out-of-range value
+      // to the mode's default (defFor) so e.g. kinetic never keeps a stale "auto".
+      const opts=(f.optsFor ? f.optsFor(state) : f.opts).split(",");
+      if(!opts.includes(state[f.key]))
+        state[f.key]= f.defFor ? f.defFor(state) : (opts.includes(f.val)?f.val:opts[0]);
+      input=el("select",{});
+      for(const o of opts) input.append(el("option",{value:o, selected:o===state[f.key]?"":null},o));
+    } else {
+      input=el("input",{type:f.type==="num"?"number":"text", value:state[f.key],
+        step:f.step??"any", ...(f.min!=null?{min:f.min}:{}), ...(f.max!=null?{max:f.max}:{})});
+    }
+    input.addEventListener("input",()=>{
+      state[f.key]= f.type==="num"? +input.value : input.value;
+      // Some fields (e.g. TRF start) change another field's available options; a full
+      // re-render recomputes dependent dropdowns (and coerces any now-invalid value).
+      if(f.rerender) renderForm(); else onAnyChange();
+    });
+    if(f.showIf){ conditionals.push({f,wrap}); wrap.style.display=f.showIf(state)?'':'none'; }
+    wrap.append(input);
+    if(f.note) wrap.append(el("div",{class:"hint"}, f.note));
+    grid.append(wrap);
+  }
+  if(grid.children.length) host.append(grid);
+  host.append(hintDiv); updateHint();
+}
+function buildPlate(){
+  const id=currentMode.id;
+  const sel = plateState[id] ||= {r0:1,c0:1,rows:5,cols:5}; // default B2..F6-ish demo
+  const wrap=el("div",{class:"field"}); wrap.append(el("label",{},"Well block (drag to select)"));
+  const box=el("div",{class:"plate"}); const tbl=el("table");
+  // header row
+  const hr=el("tr"); hr.append(el("td",{class:"corner"},""));
+  for(let c=1;c<=12;c++) hr.append(el("td",{class:"colhdr"},c));
+  tbl.append(hr);
+  let dragging=false, anchor=null;
+  const cells=[];
+  for(let r=0;r<8;r++){
+    const tr=el("tr"); tr.append(el("td",{class:"rowhdr"},String.fromCharCode(65+r)));
+    for(let c=0;c<12;c++){
+      const td=el("td",{class:"well"});
+      td.dataset.r=r; td.dataset.c=c;
+      const setFrom=(a,b)=>{ sel.r0=Math.min(a.r,b.r); sel.c0=Math.min(a.c,b.c);
+        sel.rows=Math.abs(a.r-b.r)+1; sel.cols=Math.abs(a.c-b.c)+1; paint(); };
+      td.addEventListener("mousedown",e=>{ dragging=true; anchor={r,c}; setFrom(anchor,{r,c}); e.preventDefault(); });
+      td.addEventListener("mouseenter",()=>{ if(dragging) setFrom(anchor,{r,c}); });
+      cells.push(td); tr.append(td);
+    }
+    tbl.append(tr);
+  }
+  document.addEventListener("mouseup",()=>dragging=false);
+  function paint(){
+    for(const td of cells){
+      const r=+td.dataset.r,c=+td.dataset.c;
+      const inSel = r>=sel.r0 && r<sel.r0+sel.rows && c>=sel.c0 && c<sel.c0+sel.cols;
+      td.classList.toggle("sel",inSel);
+    }
+    info.textContent = `Selected ${String.fromCharCode(65+sel.r0)}${sel.c0+1} – `+
+      `${String.fromCharCode(65+sel.r0+sel.rows-1)}${sel.c0+sel.cols}  `+
+      `(${sel.rows}×${sel.cols} = ${sel.rows*sel.cols} wells)`;
+  }
+  box.append(tbl); wrap.append(box);
+  const info=el("div",{class:"hint"}); wrap.append(info);
+  paint();
+  return wrap;
+}
+
+/* ---- run a measurement ---- */
+// After a completed plate (96-well) measurement, open the drawer so the user can
+// retrieve the plate. Cuvette reads leave the drawer alone. Failure to open is
+// non-fatal — it's logged but doesn't mark the measurement as failed.
+async function openDrawerAfterPlate(m, setProg){
+  if(m.sample!=="plate") return;
+  try{ setProg("done — opening drawer…"); await dev.openDrawer(); }
+  catch(e){ logLine("open drawer failed: "+e.message,"err"); }
+  refreshStatus().catch(()=>{});
+}
+
+async function runMeasurement(){
+  const m=currentMode;
+  const v = {...(formState[m.id]||{})};
+  if(!v._mode || !m.modes.some(x=>x.id===v._mode)) v._mode=m.modes[0].id;
+  if (m.fields.some(f=>f.type==="plate")) v.block = plateState[m.id];
+  const h = m.hint && m.hint(v); if(h && h.err){ toast("⚠ "+h.err); return; }
+  const modeTitle = (m.modes.find(x=>x.id===v._mode)||{}).title || "";
+  heatScale.userSet=false;   // each new measurement starts at the full color range
+  busy=true;
+  $("btnRun").disabled=true; $("btnCsv").disabled=true;
+  const setProg=(s)=>{ $("runStatus").textContent=s; };
+  // Keep temp/status display live during long measurements (e.g. kinetic)
+  const liveStatusTimer = setInterval(()=>{ if(link.connected) refreshStatus().catch(()=>{}); }, 2000);
+  const getStatus=()=>{
+    if(/MEASURING/i.test(lastStatusRaw)) return "measuring";
+    if(/IDLE/i.test(lastStatusRaw)) return "idle";
+    return null; // anything else (garbled/unrecognized) — don't treat as either state
+  };
+  const geom = v.block ? {startRow:v.block.r0, startCol:v.block.c0} : null;
+  try{
+    logLine(`── run: ${m.title} · ${modeTitle} ──`,"sys");
+    if(v._mode==="wellscan"){
+      // 9-position wellscan: accumulate flattened rows tagged by scan position.
+      const accRows=[]; const colSet=new Set();
+      const onTransfer=(chunk, scanPos)=>{
+        const parsed=Parse.parseTransfer(chunk);
+        const now=fmtWall();                          // wall-clock when this position transferred
+        for(const rec of parsed.records) rec.wall=now;
+        const f=Parse.flatten(parsed, geom);
+        for(const r of f.rows){ r.scan_pos=scanPos; accRows.push(r); Object.keys(r).forEach(k=>colSet.add(k)); }
+        const flat={columns:Parse.orderColumns(colSet), rows:accRows};
+        lastFlat=flat; renderResults(flat, null, v);
+      };
+      const spec=m.wellscan(v);
+      await dev.runWellscan(spec, {onProgress:setProg, onTransfer, getStatus});
+      const flat={columns:Parse.orderColumns(colSet), rows:accRows};
+      lastFlat=flat;
+      lastMeta = { mode:`${m.title} · ${modeTitle}`, mode_id:m.id, timestamp:new Date().toISOString(),
+                   commands:spec.preamble.join(" ; ")+" ; …×9 positions", records:accRows.length };
+      renderResults(flat, null, v);
+      setProg(`done — ${flat.rows.length} data rows (9 positions)`);
+      $("btnCsv").disabled=false;
+      await openDrawerAfterPlate(m, setProg);
+      return;
+    }
+    const seq = m.build(v);
+    const expected = m.reads? m.reads(v) : 1;
+    let accRaw = "";
+    // Stamp each record with the wall-clock time it was first transferred. The full
+    // accRaw is re-parsed on every transfer, so we key off the device tick to keep
+    // an already-seen read's timestamp stable instead of overwriting it.
+    const transferTimes = new Map();
+    const stampWall = (parsed) => {
+      const now = fmtWall();
+      for(const rec of parsed.records){
+        const key = rec.time;
+        if(!transferTimes.has(key)) transferTimes.set(key, now);
+        rec.wall = transferTimes.get(key);
+      }
+      return parsed;
+    };
+    // onTransfer is called after each !TRANSFER; re-parses accumulated raw so
+    // the chart and table update incrementally as each read is collected.
+    const onTransfer = (chunk) => {
+      accRaw += (accRaw ? "\n" : "") + chunk;
+      const parsed = stampWall(Parse.parseTransfer(accRaw));
+      const flat = Parse.flatten(parsed, geom);
+      lastFlat = flat;
+      renderResults(flat, parsed, v);
+    };
+    await dev.runSequence(seq, {expected, onProgress:setProg, onTransfer, getStatus});
+    const parsed = stampWall(Parse.parseTransfer(accRaw));
+    const flat = Parse.flatten(parsed, geom);
+    lastFlat=flat;
+    lastMeta = { mode:`${m.title} · ${modeTitle}`, mode_id:m.id, timestamp:new Date().toISOString(),
+                 commands:seq.join(" ; "), records:parsed.records.length };
+    renderResults(flat, parsed, v);
+    setProg(`done — ${flat.rows.length} data rows`);
+    $("btnCsv").disabled=false;
+    await openDrawerAfterPlate(m, setProg);
+  }catch(e){ logLine("run error: "+e.message,"err"); setProg("error: "+e.message); toast("Run failed: "+e.message); }
+  finally{ clearInterval(liveStatusTimer); busy=false; $("btnRun").disabled=!link.connected; refreshStatus(); }
+}
+
+function renderResults(flat, parsed, v){
+  $("resultsCard").hidden=false;
+  // table — hide column/row_index when well labels are present
+  const displayCols = flat.columns.includes("well")
+    ? flat.columns.filter(c => c !== "column" && c !== "row_index")
+    : flat.columns;
+  const t=$("resultsTable"); t.replaceChildren();
+  const thead=el("tr"); for(const c of displayCols) thead.append(el("th",{class:isText(c)?"lbl":""},colLabel(c,displayCols)));
+  t.append(thead);
+  for(const row of flat.rows){
+    const tr=el("tr");
+    for(const c of displayCols) tr.append(el("td",{class:isText(c)?"lbl":""},
+      row[c]===undefined?"":String(row[c])));
+    t.append(tr);
+  }
+  // chart
+  const kind = typeof currentMode.chart==="function" ? currentMode.chart(v) : currentMode.chart;
+  lastChart = { kind, v, parsed };
+  reconcileHeatScale(kind, flat);   // updates heatScale + slider UI, shows/hides the control
+  const area=$("chartArea"); area.replaceChildren();
+  drawChartFor(kind, area, flat, parsed, v, currentHeatScale(kind));
+}
+
+// Heatmap kinds use a color scale the user can narrow with the dual slider.
+function isHeatKind(kind){ return kind==="plate" || kind==="plate_wellscan"; }
+function heatDomainOf(flat){
+  const vals=flat.rows.map(r=>r.value).filter(v=>typeof v==="number");
+  if(!vals.length) return null;
+  return { min:Math.min(...vals), max:Math.max(...vals) };
+}
+// The scale passed to the heatmap renderers (or null → they use their own data range).
+function currentHeatScale(kind){
+  if(!isHeatKind(kind) || !(heatScale.max>heatScale.min)) return null;
+  return { lo:heatScale.lo, hi:heatScale.hi };
+}
+// Recompute the data domain, reconcile user-set bounds against it, and refresh the slider.
+function reconcileHeatScale(kind, flat){
+  const dom = isHeatKind(kind) ? heatDomainOf(flat) : null;
+  const usable = dom && dom.max>dom.min;
+  $("heatScaleWrap").hidden = !usable;
+  if(!usable) return;
+  heatScale.min=dom.min; heatScale.max=dom.max;
+  if(!heatScale.userSet){
+    heatScale.lo=dom.min; heatScale.hi=dom.max;
+  } else {
+    // Keep the user's absolute bounds but clamp into the (possibly grown) domain.
+    heatScale.lo=Math.min(Math.max(heatScale.lo, dom.min), dom.max);
+    heatScale.hi=Math.max(Math.min(heatScale.hi, dom.max), dom.min);
+    if(heatScale.lo>=heatScale.hi){ heatScale.lo=dom.min; heatScale.hi=dom.max; }
+  }
+  syncSliderFromState();
+}
+
+// --- dual-handle slider <-> heatScale ---
+const SLIDER_N = 1000;   // slider works in integer steps; mapped to the value domain
+function valToN(val){
+  const span=heatScale.max-heatScale.min;
+  return span>0 ? Math.round((val-heatScale.min)/span*SLIDER_N) : 0;
+}
+function nToVal(n){
+  return heatScale.min + (n/SLIDER_N)*(heatScale.max-heatScale.min);
+}
+function fmtScaleVal(v){
+  const a=Math.abs(v);
+  return a>=1000? v.toFixed(0) : a>=1? v.toFixed(2) : v.toPrecision(3);
+}
+// Push heatScale.lo/hi into the slider handles, fill bar, and value labels.
+function syncSliderFromState(){
+  const loN=valToN(heatScale.lo), hiN=valToN(heatScale.hi);
+  $("drLo").value=loN; $("drHi").value=hiN;
+  const pct=n=>(n/SLIDER_N)*100;
+  const fill=$("drFill");
+  fill.style.left=pct(loN)+"%";
+  fill.style.width=Math.max(0,pct(hiN)-pct(loN))+"%";
+  $("drLoVal").textContent=fmtScaleVal(heatScale.lo);
+  $("drHiVal").textContent=fmtScaleVal(heatScale.hi);
+  // keep whichever handle is in the upper half clickable on top
+  $("drLo").style.zIndex = loN>SLIDER_N/2 ? 5 : 3;
+  $("drHi").style.zIndex = 4;
+}
+// Redraw just the heatmaps (cheap) when the user drags — leaves the slider DOM intact.
+function redrawHeatmaps(){
+  if(!lastFlat || !lastChart) return;
+  const area=$("chartArea"); area.replaceChildren();
+  drawChartFor(lastChart.kind, area, lastFlat, lastChart.parsed, lastChart.v, currentHeatScale(lastChart.kind));
+}
+function onSliderInput(which){
+  let loN=+$("drLo").value, hiN=+$("drHi").value;
+  if(which==="lo" && loN>hiN-1) loN=Math.max(0, hiN-1);
+  if(which==="hi" && hiN<loN+1) hiN=Math.min(SLIDER_N, loN+1);
+  $("drLo").value=loN; $("drHi").value=hiN;
+  heatScale.lo=nToVal(loN); heatScale.hi=nToVal(hiN);
+  heatScale.userSet=true;
+  syncSliderFromState();
+  redrawHeatmaps();
+}
+function resetHeatScale(){
+  heatScale.userSet=false;
+  heatScale.lo=heatScale.min; heatScale.hi=heatScale.max;
+  syncSliderFromState();
+  redrawHeatmaps();
+}
+function isText(c){ return c==="well" || c==="time"; }
+function colLabel(c, displayCols){
+  // When a plate measurement carries an excitation value alongside it, the "wavelength"
+  // column is really the emission wavelength — label it accordingly.
+  if (c==="wavelength" && displayCols.includes("excitation")) return "Emission";
+  if (c==="excitation") return "Excitation";
+  return c;
+}
+
+function drawChartFor(kind, area, flat, parsed, v, scale){
+  if(kind==="none") return;
+  // Plate heatmaps, grouped by a key (wavelength, or scan position for wellscan).
+  const heatmapGroups=(keyOf, labelOf, render=plateHeatmap)=>{
+    if(!v.block) return;
+    const keys=[...new Set(flat.rows.map(keyOf).filter(k=>k!=null))];
+    if(!keys.length){ render(area, flat, v.block, scale); return; }
+    for(const k of keys){
+      const sub={...flat, rows:flat.rows.filter(r=>keyOf(r)===k)};
+      const grp=el("div",{class:"heatmap-group"});
+      grp.append(el("div",{class:"hmap-label"}, labelOf(k)));
+      render(grp, sub, v.block, scale);
+      area.append(grp);
+    }
+  };
+  if(kind==="plate"){
+    heatmapGroups(r=>r.wavelength, wl=> wl===0 ? "all wavelengths" : `${wl} nm`);
+    return;
+  }
+  if(kind==="plate_wellscan"){
+    // Same per-wavelength grouping as a normal plate, but each well is drawn as a
+    // 3×3 grid of its 9 scan positions (scan_pos 1..9, reading order, 5 = center).
+    heatmapGroups(r=>r.wavelength, wl=> wl===0 ? "all wavelengths" : `${wl} nm`, plateHeatmapWellscan);
+    return;
+  }
+  // build line series from flat rows
+  let series=[];
+  if(kind==="abs"){
+    series=[{label:"absorbance", points:flat.rows.map(r=>[r.wavelength,r.absorbance])}];
+    lineChart(area,series,{xlabel:"wavelength (nm)",ylabel:"absorbance"}); return;
+  }
+  if(kind==="kinetic"){
+    const t0=flat.rows.length?flat.rows[0].ticks:0;
+    const byWl={};
+    for(const r of flat.rows){ (byWl[r.wavelength]??=[]).push([ (r.ticks-t0)/1000, r.absorbance ]); }
+    series=Object.entries(byWl).map(([wl,pts])=>({label:wl+" nm",points:pts}));
+    lineChart(area,series,{xlabel:"time (s)",ylabel:"absorbance"}); return;
+  }
+  if(kind==="spectrum"){
+    series=[{label:"absorbance",points:flat.rows.map(r=>[r.wavelength,r.absorbance])}];
+    lineChart(area,series,{xlabel:"wavelength (nm)",ylabel:"absorbance"}); return;
+  }
+  if(kind==="spectrum_em"){
+    series=[{label:"emission",points:flat.rows.map(r=>[r.em_nm,r.value])}];
+    lineChart(area,series,{xlabel:"emission (nm)",ylabel:"intensity"}); return;
+  }
+  if(kind==="spectrum_ex"){
+    series=[{label:"excitation",points:flat.rows.map(r=>[r.ex_nm,r.value])}];
+    lineChart(area,series,{xlabel:"excitation (nm)",ylabel:"intensity"}); return;
+  }
+  // Plate line charts: one line per well. xOf picks the swept axis per row.
+  const perWellLines=(xOf, xlabel, ylabel)=>{
+    const byWell={};
+    for(const r of flat.rows){
+      const key = r.well ?? `col${r.column}`;
+      const x=xOf(r); if(x==null) continue;
+      (byWell[key]??=[]).push([x, r.value]);
+    }
+    const ser=Object.entries(byWell)
+      .sort((a,b)=>a[0].localeCompare(b[0]))
+      .map(([well,pts])=>({label:well, points:pts.sort((a,b)=>a[0]-b[0])}));
+    lineChart(area,ser,{xlabel,ylabel});
+  };
+  if(kind==="plate_spectrum_em"){
+    perWellLines(r=>r.wavelength, "emission wavelength (nm)", "signal"); return;
+  }
+  if(kind==="plate_spectrum_ex"){
+    perWellLines(r=>r.excitation, "excitation wavelength (nm)", "signal"); return;
+  }
+  if(kind==="plate_kinetic"){
+    const t0=flat.rows.length?flat.rows[0].ticks:0;
+    perWellLines(r=>(r.ticks-t0)/1000, "time (s)", "signal"); return;
+  }
+}
+
+function saveCsv(){
+  if(!lastFlat) return;
+  const fn = `${currentMode.id}_${new Date().toISOString().replace(/[:.]/g,"-")}.csv`;
+  downloadCSV(toCSV(lastMeta||{}, lastFlat), fn);
+  toast("Saved "+fn);
+}
+
+/* ===================================================================
+   Self-test — exact example responses from the M2e spec as fixtures
+   =================================================================== */
+// Fixtures use actual tab-separated format as sent by the real M2e device.
+// Fields are separated by TAB; decimal numbers still use '.'.
+const FIXTURES = {
+  cuv_abs:"13934785\t25.7\tcuvette\nL:\t426\t500\nL:\t426\t0.1114\t77.3670\nL:\t500\t0.1029\t78.9028",
+  cuv_abs_multi:"96120073\t28.3\tcuvette\nL:\t426\t600\t900\t\nL:\t426\t0.1413\t72.2257\t\nL:\t600\t0.1250\t74.9965\t\nL:\t900\t0.1434\t71.8712\t",
+  cuv_kinetic:"88945095\t27.6\tcuvette\nL:\t426\t0.1371\t72.9329\t\n88995097\t27.6\tcuvette\nL:\t426\t0.1357\t73.1604\t\n89045099\t27.6\tcuvette\nL:\t426\t0.1351\t73.2612\t",
+  cuv_spectrum:"91275528\t27.4\tcuvette\nL:\t350\t\nL:\t350\t0.1741\t66.9752\t\n91284740\t27.4\tcuvette\nL:\t360\t\nL:\t360\t0.1638\t68.5730\t",
+  cuv_fluo:"92996653\t28.5\tcuvette\nexL:\t485\nemL:\t525\nL:\t485\t525\t\n\t0.554",
+  cuv_fluo_multi:"24171029\t27.6\tcuvette\nexL:\t485\t450\nemL:\t525\t600\nL:\t485\t525\t\n\t0.350\nL:\t450\t600\t\n\t0.339",
+  cuv_em_spectrum:"98282675\t28.2\tcuvette\nexL:\t350\nemL:\t400\nL:\t350\t400\t\n\t18.096\n98299581\t28.2\tcuvette\nemL:\t410\nL:\t350\t410\t\n\t17.373",
+  pla_abs:"107720181\t27.7\tplate\nL:\t405\t\n3:\t0.0000\t-0.0000\t\n4:\t0.0001\t-0.0001\t\n5:\t0.0000\t0.0000\t\n6:\t0.0001\t0.0000\t\n7:\t0.0001\t-0.0000\t",
+  pla_abs_multi:"55667259\t25.8\tplate\nL:\t405\t700\nL:\t405\n2:\t-0.0000\t-0.0000\n3:\t0.0000\t-0.0000\n4:\t0.0000\t-0.0000\n5:\t0.0000\t-0.0000\n6:\t0.0001\t-0.0000\n7:\t0.0001\t0.0000\nL:\t700\n2:\t-0.0001\t-0.0002\n3:\t-0.0000\t-0.0003\n4:\t-0.0001\t-0.0003\n5:\t-0.0002\t-0.0003\n6:\t-0.0001\t-0.0003\n7:\t-0.0001\t-0.0002",
+  pla_trf:"115057616\t27.4\tplate\n3:\t489.544\t517.097\t\n4:\t482.292\t515.374\t\n5:\t499.783\t490.926\t",
+  pla_lum:"117823090\t27.2\tplate\nexL:\t0\nemL:\t0\nL:\t0\t0\t\n3:\t239.942\t224.910\t\n4:\t235.988\t257.408\t",
+  pla_fluo:"27745214\t27.0\tplate\nexL:\t485\t485\nemL:\t525\t600\nL:\t485\t525\n2:\t0.223\t0.226\n3:\t0.264\t0.221\n4:\t0.262\t0.244\n5:\t0.273\t0.245\n6:\t0.223\t0.209\n7:\t0.269\t0.220\nL:\t485\t600\n2:\t0.218\t0.187\n3:\t0.239\t0.202\n4:\t0.220\t0.258\n5:\t0.233\t0.236\n6:\t0.215\t0.206\n7:\t0.183\t0.190",
+  pla_sat:"127192577\t26.8\tplate\nexL:\t485\nemL:\t515\nL:\t485\t515\t\n 1:\t    #SAT\t\n 2:\t3290.598\t\n 3:\t 453.851\t",
+};
+
+function runSelfTest(){
+  const out=$("selftestOut"); if(out) out.replaceChildren();
+  const checks=[];
+  const T=(name,cond,detail="")=>checks.push({name,ok:!!cond,detail});
+
+  let p=Parse.parseTransfer(FIXTURES.cuv_abs);
+  T("cuv_abs: 2 wl rows, no false fluo pair", p.records[0].abs.length===2 && p.records[0].fluo.length===0
+      && p.records[0].abs[0].wavelength===426 && Math.abs(p.records[0].abs[0].absorbance-0.1114)<1e-9
+      && p.records[0].abs[1].wavelength===500 && Math.abs(p.records[0].abs[1].transmittance-78.9028)<1e-9);
+
+  p=Parse.parseTransfer(FIXTURES.cuv_abs_multi);
+  T("cuv_abs multi: 3 wl rows", p.records[0].abs.length===3
+      && p.records[0].abs[2].wavelength===900);
+
+  p=Parse.parseTransfer(FIXTURES.cuv_kinetic);
+  T("kinetic: 3 records", p.records.length===3 && p.records[1].abs[0].absorbance===0.1357);
+
+  p=Parse.parseTransfer(FIXTURES.cuv_spectrum);
+  T("spectrum: 2 records", p.records.length===2 && p.records[1].abs[0].wavelength===360);
+
+  p=Parse.parseTransfer(FIXTURES.cuv_fluo);
+  T("fluo: ex/em/value", p.records[0].ex[0]===485 && p.records[0].em[0]===525
+      && Math.abs(p.records[0].fluo[0].value-0.554)<1e-9
+      && p.records[0].fluo[0].ex===485 && p.records[0].fluo[0].em===525);
+
+  p=Parse.parseTransfer(FIXTURES.cuv_fluo_multi);
+  T("fluo multi: 2 pairs", p.records[0].fluo.length===2
+      && p.records[0].fluo[1].ex===450 && p.records[0].fluo[1].em===600
+      && Math.abs(p.records[0].fluo[1].value-0.339)<1e-9);
+
+  p=Parse.parseTransfer(FIXTURES.cuv_em_spectrum);
+  T("em spectrum: 2 records", p.records.length===2
+      && p.records[1].fluo[0].em===410 && Math.abs(p.records[1].fluo[0].value-17.373)<1e-9);
+
+  p=Parse.parseTransfer(FIXTURES.pla_abs);
+  T("plate abs: header + 5 cols", p.records[0].type==="plate"
+      && p.records[0].wells.length===5 && p.records[0].wells[0].column===3
+      && p.records[0].wells[0].values.length===2
+      && p.records[0].wavelengths[0]===405);
+
+  p=Parse.parseTransfer(FIXTURES.pla_trf);
+  T("plate trf: 3 cols x2", p.records[0].wells.length===3
+      && Math.abs(p.records[0].wells[0].values[0]-489.544)<1e-9);
+
+  p=Parse.parseTransfer(FIXTURES.pla_lum);
+  T("plate lum: 2 cols", p.records[0].wells.length===2
+      && Math.abs(p.records[0].wells[1].values[1]-257.408)<1e-9);
+
+  p=Parse.parseTransfer(FIXTURES.pla_fluo);
+  T("plate fluo: 2 wl groups w/ excitation", p.records[0].type==="plate"
+      && p.records[0].wells.length===12
+      && p.records[0].wells[0].wavelength===525 && p.records[0].wells[0].excitation===485
+      && p.records[0].wells[6].wavelength===600 && p.records[0].wells[6].excitation===485);
+
+  p=Parse.parseTransfer(FIXTURES.pla_abs_multi);
+  T("plate abs multi: 2 wl groups", p.records[0].type==="plate"
+      && p.records[0].wavelengths.length===2 && p.records[0].wavelengths[0]===405 && p.records[0].wavelengths[1]===700
+      && p.records[0].wells.length===12
+      && p.records[0].wells[0].wavelength===405 && p.records[0].wells[0].column===2
+      && p.records[0].wells[6].wavelength===700 && p.records[0].wells[6].column===2);
+
+  // flatten + plate well labelling
+  const fp=Parse.flatten(Parse.parseTransfer(FIXTURES.pla_abs), {startRow:1,startCol:2});
+  T("flatten plate: 10 rows, labelled", fp.rows.length===10 && fp.rows[0].well==="B3");
+
+  const fm=Parse.flatten(Parse.parseTransfer(FIXTURES.pla_abs_multi), {startRow:1,startCol:1});
+  T("flatten plate multi: 24 rows, per-wl", fm.rows.length===24
+      && fm.rows[0].well==="B2" && fm.rows[0].wavelength===405
+      && fm.rows[12].well==="B2" && fm.rows[12].wavelength===700);
+
+  const ff=Parse.flatten(Parse.parseTransfer(FIXTURES.pla_fluo), {startRow:1,startCol:1});
+  T("flatten plate fluo: excitation column", ff.columns.includes("excitation")
+      && ff.rows[0].wavelength===525 && ff.rows[0].excitation===485);
+
+  const fa=Parse.flatten(Parse.parseTransfer(FIXTURES.cuv_abs_multi));
+  T("flatten abs: 3 rows, cols", fa.rows.length===3 && fa.columns.includes("absorbance"));
+
+  // #SAT (saturated detector) is kept as the text value "saturated", not dropped
+  p=Parse.parseTransfer(FIXTURES.pla_sat);
+  T("plate sat: #SAT kept as text", p.records[0].wells.length===3
+      && p.records[0].wells[0].column===1 && p.records[0].wells[0].values[0]==="saturated"
+      && Math.abs(p.records[0].wells[1].values[0]-3290.598)<1e-9);
+  const fs=Parse.flatten(p,{startRow:0,startCol:0});
+  T("flatten sat: saturated row retained", fs.rows.length===3
+      && fs.rows[0].well==="A1" && fs.rows[0].value==="saturated"
+      && toCSV({mode:"sat"}, fs).includes("saturated"));
+
+  // device counter → "ticks"; wall-clock at transfer → "time"
+  T("fmtWall: mm/dd/yy HH:mm:ss", fmtWall(new Date(2026,5,20,14,3,9))==="06/20/26 14:03:09");
+  const pt=Parse.parseTransfer(FIXTURES.pla_abs);
+  pt.records.forEach(r=>r.wall="06/20/26 14:03:30");
+  const ft=Parse.flatten(pt,{startRow:0,startCol:0});
+  T("time/ticks columns", ft.columns.includes("time") && ft.columns.includes("ticks")
+      && ft.columns.indexOf("time")<ft.columns.indexOf("ticks")
+      && ft.rows[0].ticks===107720181 && ft.rows[0].time==="06/20/26 14:03:30"
+      && toCSV({mode:"t"}, ft).includes("06/20/26 14:03:30"));
+
+  // wellscan: run layer parses each position separately and tags scan_pos
+  const wsRaw="42425189\t26.8\tplate\nL:\t426\nL:\t426\n2:\t0.0000\t-0.0001\n3:\t0.0000\t-0.0001";
+  const wsTag=(raw,pos)=>Parse.flatten(Parse.parseTransfer(raw),{startRow:1,startCol:1}).rows.map(r=>({...r,scan_pos:pos}));
+  const wsRows=[...wsTag(wsRaw,1),...wsTag(wsRaw,2)];
+  const wsCols=Parse.orderColumns(new Set(wsRows.flatMap(r=>Object.keys(r))));
+  T("wellscan: scan_pos 1 & 2 tagged", wsRows.length===8 && wsCols.includes("scan_pos")
+      && wsRows[0].scan_pos===1 && wsRows[0].well==="B2" && wsRows[4].scan_pos===2);
+
+  // CSV round-trips a numeric value
+  const csv=toCSV({mode:"test"}, fa);
+  T("csv contains data", csv.includes("0.1413") && csv.split("\r\n").length>=5);
+
+  const pass=checks.filter(c=>c.ok).length, total=checks.length;
+  if(out){
+    out.append(el("div",{}, el("b",{class:pass===total?"pass":"fail"}, `${pass}/${total} passed`)));
+    for(const c of checks){
+      out.append(el("div",{class:c.ok?"pass":"fail"}, (c.ok?"✓ ":"✗ ")+c.name+(c.detail?" — "+c.detail:"")));
+    }
+  }
+  logLine(`self-test: ${pass}/${total} passed`, pass===total?"sys":"err");
+  return {pass,total};
+}
+window.__opr = { Parse, FIXTURES, runSelfTest, READTYPES, link, dev, drawChartFor, plateHeatmapWellscan }; // expose for headless verification
+
+/* ===================================================================
+   Boot
+   =================================================================== */
+function boot(){
+  if(!("serial" in navigator)){ $("unsupported").hidden=false; }
+  buildModeList(); renderForm();
+
+  $("btnConnect").onclick=doConnect;
+  $("btnDisconnect").onclick=doDisconnect;
+  applyCmdDelay();                          // seed link.cmdDelay from the field's default
+  $("cmdDelay").addEventListener("input", applyCmdDelay);   // and keep it live
+
+  $("drLo").addEventListener("input", ()=>onSliderInput("lo"));
+  $("drHi").addEventListener("input", ()=>onSliderInput("hi"));
+  $("heatScaleReset").onclick=resetHeatScale;
+  const quickRefresh = () => { refreshStatus().catch(()=>{}); setTimeout(()=>refreshStatus().catch(()=>{}), 800); };
+  $("btnOpen").onclick=()=>dev.openDrawer().then(quickRefresh);
+  $("btnClose").onclick=()=>dev.closeDrawer().then(quickRefresh);
+  $("btnSetTemp").onclick=()=>dev.setTemp($("setTemp").value).then(quickRefresh);
+  $("btnTempOff").onclick=()=>dev.setTemp(0).then(quickRefresh);
+  $("btnShakeNow").onclick=()=>dev.shakeNow();
+  $("btnShakeStop").onclick=()=>dev.shakeStop();
+  $("btnRun").onclick=runMeasurement;
+  $("btnCsv").onclick=saveCsv;
+
+  // terminal
+  const term=$("term");
+  let termHeight=210;                 // remembered expanded height (px)
+  const applyTermHeight=()=>{ term.style.height = term.classList.contains("collapsed") ? "" : termHeight+"px"; };
+  $("termBar").onclick=()=>{ term.classList.toggle("collapsed");
+    $("termToggle").textContent=term.classList.contains("collapsed")?"▸":"▾";
+    applyTermHeight(); };
+
+  // drag the top edge to resize
+  $("termResize").addEventListener("pointerdown",e=>{
+    if(term.classList.contains("collapsed")) return;
+    e.preventDefault();
+    const startY=e.clientY, startH=term.getBoundingClientRect().height;
+    const minH=120, maxH=Math.max(minH, window.innerHeight-120);
+    const onMove=ev=>{
+      termHeight=Math.min(maxH, Math.max(minH, startH+(startY-ev.clientY)));
+      term.style.height=termHeight+"px";
+    };
+    const onUp=()=>{ document.removeEventListener("pointermove",onMove);
+      document.removeEventListener("pointerup",onUp); document.body.style.userSelect=""; };
+    document.body.style.userSelect="none";
+    document.addEventListener("pointermove",onMove);
+    document.addEventListener("pointerup",onUp);
+  });
+  $("btnClearLog").onclick=()=>$("termLog").replaceChildren();
+  const sendTerm=async()=>{ const v=$("termInput").value.trim(); if(!v) return;
+    $("termInput").value=""; try{ await link.send(v); }catch(e){ logLine(e.message,"err"); } };
+  $("termSend").onclick=sendTerm;
+  $("termInput").addEventListener("keydown",e=>{ if(e.key==="Enter") sendTerm(); });
+
+  window.addEventListener("beforeunload",()=>{ if(link.connected) link.disconnect(); });
+  logLine("ready — open this file in Chrome/Edge, then Connect.","sys");
+}
+document.addEventListener("DOMContentLoaded", boot);
+</script>
+</body>
+</html>
